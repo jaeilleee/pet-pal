@@ -114,23 +114,37 @@ export function createInitialState(): PetPalState {
   };
 }
 
+/** petStats 마이그레이션 — undefined 필드를 기본값으로 채움 */
+export function migratePetStats(raw: Partial<PetStats> | undefined): PetStats {
+  const defaults = createInitialState().petStats;
+  if (!raw) return defaults;
+  return {
+    hunger: typeof raw.hunger === 'number' ? raw.hunger : defaults.hunger,
+    happiness: typeof raw.happiness === 'number' ? raw.happiness : defaults.happiness,
+    cleanliness: typeof raw.cleanliness === 'number' ? raw.cleanliness : defaults.cleanliness,
+    energy: typeof raw.energy === 'number' ? raw.energy : defaults.energy,
+    bond: typeof raw.bond === 'number' ? raw.bond : defaults.bond,
+  };
+}
+
 /** 시간 경과에 따른 스탯 감소 */
 export function decayStats(state: PetPalState): PetPalState {
   const now = Date.now();
   const elapsed = now - state.lastDecayAt;
   const minutes = elapsed / (1000 * 60);
 
-  // 10분마다 1포인트씩 감소
+  // 10분 미만이면 감소 없음
   if (minutes < 10) return state;
 
   const decayTicks = Math.floor(minutes / 10);
-  const decay = Math.min(decayTicks, 10); // 최대 10포인트 한번에
+  const decay = Math.min(decayTicks, 6); // 최대 6틱 (1시간분) — 하한선 보호
 
   const stats = { ...state.petStats };
-  stats.hunger = Math.max(0, stats.hunger - decay * 2);
-  stats.happiness = Math.max(0, stats.happiness - decay * 1.5);
-  stats.cleanliness = Math.max(0, stats.cleanliness - decay);
-  stats.energy = Math.max(0, stats.energy - decay * 0.8);
+  // 감소 후에도 최소 20% 보장 (오래 접속 안 해도 바닥 안 찍음)
+  stats.hunger = Math.max(15, stats.hunger - decay * 1.5);
+  stats.happiness = Math.max(15, stats.happiness - decay * 1.2);
+  stats.cleanliness = Math.max(15, stats.cleanliness - decay * 0.8);
+  stats.energy = Math.max(10, stats.energy - decay * 0.6);
 
   return {
     ...state,

@@ -39,7 +39,7 @@ export class PetCanvas {
     this.season = this.getCurrentSeason();
 
     this.W = Math.min(container.clientWidth || 350, 390);
-    this.H = 250;
+    this.H = Math.min(container.clientHeight || 180, 180);
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.W * 2;
     this.canvas.height = this.H * 2;
@@ -48,7 +48,9 @@ export class PetCanvas {
     this.canvas.className = 'pet-canvas';
     container.appendChild(this.canvas);
 
-    this.ctx = this.canvas.getContext('2d')!;
+    const ctx2d = this.canvas.getContext('2d');
+    if (!ctx2d) throw new Error('PetCanvas: 2d context unavailable');
+    this.ctx = ctx2d;
     this.ctx.scale(2, 2);
 
     // Touch interaction

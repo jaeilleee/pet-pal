@@ -171,9 +171,9 @@ export class HomeScene implements Scene {
     if (achBtn) {
       const handler = (): void => {
         this.ctx.sound.playClick();
-        import('./AchievementsScene').then(m => {
-          this.ctx.scenes.switchTo(() => new m.AchievementsScene(this.ctx));
-        });
+        import('./AchievementsScene')
+          .then(m => this.ctx.scenes.switchTo(() => new m.AchievementsScene(this.ctx)))
+          .catch(err => console.error('[HomeScene] load failed', err));
       };
       achBtn.addEventListener('click', handler);
       this.cleanups.push(() => achBtn.removeEventListener('click', handler));
@@ -243,13 +243,17 @@ export class HomeScene implements Scene {
         this.ctx.sound.playClick();
         break;
       case 'shop':
-        import('./ShopScene').then(m => this.ctx.scenes.switchTo(() => new m.ShopScene(this.ctx)));
+        import('./ShopScene')
+          .then(m => this.ctx.scenes.switchTo(() => new m.ShopScene(this.ctx)))
+          .catch(err => console.error('[HomeScene] load failed', err));
         return;
       case 'minigame':
         this.showMiniGamePicker(root);
         return;
       case 'profile':
-        import('./ProfileScene').then(m => this.ctx.scenes.switchTo(() => new m.ProfileScene(this.ctx)));
+        import('./ProfileScene')
+          .then(m => this.ctx.scenes.switchTo(() => new m.ProfileScene(this.ctx)))
+          .catch(err => console.error('[HomeScene] load failed', err));
         return;
     }
 
@@ -299,9 +303,10 @@ export class HomeScene implements Scene {
   private checkAchievements(): void {
     const newAchs = checkNewAchievements(this.ctx.state.current);
     if (newAchs.length > 0) {
-      const reward = claimAchievements(this.ctx.state.current, newAchs);
+      const result = claimAchievements(this.ctx.state.current, newAchs);
+      this.ctx.state.current = result.state;
       for (const ach of newAchs) {
-        showToast(`🏆 ${ach.emoji} ${ach.name} 달성! +${ach.reward}G`);
+        showToast(`🏆 ${ach.emoji} ${ach.name} +${ach.reward}G`);
       }
       this.petCanvas?.emitParticles('star', 8);
     }

@@ -286,19 +286,32 @@ function drawEye(
     return;
   }
 
-  // White of eye
+  // Happy eyes (^_^ shape) — early return before normal eye
+  if (anim.emotion === 'happy' || anim.emotion === 'eating') {
+    ctx.fillStyle = colors_backup(color);
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 1.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = r * 0.25;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(x, y + r * 0.2, r * 0.55, Math.PI + 0.3, -0.3, false);
+    ctx.stroke();
+    return;
+  }
+
+  // Normal eye — white, iris, pupil, sparkle
   ctx.fillStyle = '#FFFFFF';
   ctx.beginPath();
   ctx.ellipse(x, y, r, r * 1.1, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Iris
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(x, y + r * 0.05, r * 0.65, 0, Math.PI * 2);
   ctx.fill();
 
-  // Pupil
   ctx.fillStyle = '#000000';
   ctx.beginPath();
   ctx.arc(x, y + r * 0.1, r * 0.35, 0, Math.PI * 2);
@@ -312,20 +325,6 @@ function drawEye(
   ctx.beginPath();
   ctx.arc(x + r * 0.15, y + r * 0.15, r * 0.1, 0, Math.PI * 2);
   ctx.fill();
-
-  // Happy eyes (^_^)
-  if (anim.emotion === 'happy' || anim.emotion === 'eating') {
-    ctx.fillStyle = colors_backup(color);
-    ctx.beginPath();
-    ctx.ellipse(x, y, r, r * 1.1, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = r * 0.25;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(x, y + r * 0.3, r * 0.5, Math.PI + 0.3, -0.3);
-    ctx.stroke();
-  }
 }
 
 function colors_backup(eyeColor: string): string {

@@ -76,14 +76,24 @@ export function checkNewAchievements(state: PetPalState): AchievementDef[] {
   return newOnes;
 }
 
-/** 업적 달성 처리 (state 직접 변경) */
-export function claimAchievements(state: PetPalState, achievements: AchievementDef[]): number {
+/** 업적 달성 처리 (불변 — 새 state 반환) */
+export function claimAchievements(
+  state: PetPalState,
+  achievements: AchievementDef[],
+): { state: PetPalState; totalReward: number } {
   let totalReward = 0;
+  const newAchievements = { ...state.achievements };
   for (const ach of achievements) {
-    state.achievements[ach.id] = true;
-    state.gold += ach.reward;
-    state.totalGoldEarned += ach.reward;
+    newAchievements[ach.id] = true;
     totalReward += ach.reward;
   }
-  return totalReward;
+  return {
+    state: {
+      ...state,
+      achievements: newAchievements,
+      gold: state.gold + totalReward,
+      totalGoldEarned: state.totalGoldEarned + totalReward,
+    },
+    totalReward,
+  };
 }
