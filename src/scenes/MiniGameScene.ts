@@ -8,6 +8,7 @@ import type { AppContext } from '../app/AppContext';
 import type { PetPalState } from '../data/state';
 import type { SceneManager } from './SceneManager';
 import { COLORS } from '../data/design-tokens';
+import { applyEffectsToPet } from '../data/state';
 import { showToast } from '../ui/Toast';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
@@ -226,7 +227,7 @@ export class MiniGameScene implements Scene {
     this.running = false;
     cancelAnimationFrame(this.frameId);
 
-    const state = this.ctx.state.current;
+    let state = this.ctx.state.current;
     state.totalMiniGamesPlayed++;
     const isHighScore = this.score > state.miniGameHighScore;
     if (isHighScore) state.miniGameHighScore = this.score;
@@ -234,8 +235,8 @@ export class MiniGameScene implements Scene {
     const goldReward = Math.floor(this.score / 5);
     state.gold += goldReward;
     state.totalGoldEarned += goldReward;
-    state.petStats.happiness = Math.min(100, state.petStats.happiness + 10);
-    state.petStats.bond += 2;
+    state = applyEffectsToPet(state, state.activePetIndex, { happiness: 10, bond: 2 });
+    this.ctx.state.current = state;
     this.ctx.save.save(state);
 
     const overlay = document.querySelector('#mg-overlay') as HTMLElement;

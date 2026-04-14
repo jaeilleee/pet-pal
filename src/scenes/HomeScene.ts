@@ -1,13 +1,16 @@
 /**
- * HomeScene -- 메인 홈 화면 (Canvas 펫 렌더러 + 돌봄 액션)
+ * HomeScene -- 메인 홈 화면 (멀티펫 Canvas + 돌봄 액션)
  */
 
 import type { Scene } from './SceneManager';
 import type { AppContext } from '../app/AppContext';
-import type { PetPalState } from '../data/state';
+import type { PetPalState, PetStats, PetData } from '../data/state';
 import type { SceneManager } from './SceneManager';
 import { PETS, getGrowthStage } from '../data/pets';
-import { decayStats, applyEffects, overallMood, moodEmoji } from '../data/state';
+import {
+  getActivePet, getActiveStats, applyEffectsToPet,
+  decayAllPets, overallMood, moodEmoji,
+} from '../data/state';
 import { getItemById } from '../data/items';
 import { processLogin, updateDailyProgress, allDailyTasksDone, getDailyRewardTotal } from '../data/daily';
 import { getTimeOfDay, getTimeBackground } from '../data/time-guard';
@@ -24,12 +27,12 @@ const COOLDOWNS: Record<string, number> = {
 };
 
 /** 대화 응답 (스탯 연동) */
-function getPetSpeech(stats: import('../data/state').PetStats): string {
-  if (stats.hunger < 30) return '배고파... 밥 줘! 🍖';
-  if (stats.happiness < 30) return '심심해... 놀아줘! 🎾';
-  if (stats.cleanliness < 30) return '씻고 싶어... 🛁';
-  if (stats.energy < 25) return '졸려... 💤';
-  const happy = ['좋아! 💕', '고마워! 🥰', '사랑해! ❤️', '오늘 기분 좋아! 😄', '산책 가고 싶어! 🌳', '같이 놀자! 🎉', '간식 먹고 싶어~ 🍪'];
+function getPetSpeech(stats: PetStats): string {
+  if (stats.hunger < 30) return '배고파... 밥 줘!';
+  if (stats.happiness < 30) return '심심해... 놀아줘!';
+  if (stats.cleanliness < 30) return '씻고 싶어...';
+  if (stats.energy < 25) return '졸려...';
+  const happy = ['좋아!', '고마워!', '사랑해!', '오늘 기분 좋아!', '산책 가고 싶어!', '같이 놀자!', '간식 먹고 싶어~'];
   return happy[Math.floor(Math.random() * happy.length)];
 }
 
@@ -44,47 +47,51 @@ export class HomeScene implements Scene {
   }
 
   mount(root: HTMLElement): void {
-    // 로그인 처리
-    const loginResult = processLogin(this.ctx.state.current);
-    this.ctx.state.current = loginResult.state;
-    if (loginResult.reward > 0) {
-      showToast(`출석 보상: ${loginResult.reward}G (${loginResult.chainDay}일차)`);
-    }
-    if (loginResult.streakMilestone) {
-      showToast(`연속 ${this.ctx.state.current.streak}일 출석! +${loginResult.streakMilestone}G`);
-    }
+    this.processLoginRewards();
 
     // 스탯 감소 + 업적 체크
-    this.ctx.state.current = decayStats(this.ctx.state.current);
+    this.ctx.state.current = decayAllPets(this.ctx.state.current);
     this.checkAchievements();
     this.ctx.save.save(this.ctx.state.current);
 
     const state = this.ctx.state.current;
-    const pet = PETS[state.petType!];
-    const stage = getGrowthStage(state.petType!, state.petStats.bond);
-    const stageInfo = pet.stages[stage];
-    const isSleeping = getTimeOfDay() === 'night' && state.petStats.energy < 30;
+    const activePet = getActivePet(state);
+
+    if (!activePet) {
+      // 펫 없음 -> 선택 화면
+      import('./PetSelectScene').then(m => {
+        this.ctx.scenes.switchTo(() => new m.PetSelectScene(this.ctx));
+      }).catch(err => console.error('[HomeScene] PetSelect load failed', err));
+      return;
+    }
+
+    const stage = getGrowthStage(activePet.type, activePet.stats.bond);
+    const stageInfo = PETS[activePet.type].stages[stage];
+    const isSleeping = getTimeOfDay() === 'night' && activePet.stats.energy < 30;
 
     root.innerHTML = `
       <div class="scene home-scene" style="background:${getTimeBackground()}">
         <div class="home-header">
           <div class="home-gold"><span class="gold-icon">💰</span><span id="gold-amount">${state.gold}</span>G</div>
-          <div class="home-mood" id="mood-display">${moodEmoji(state.petStats)}</div>
+          <div class="pet-tabs" id="pet-tabs">${this.renderPetTabs(state)}</div>
+          <div class="home-mood" id="mood-display">${moodEmoji(activePet.stats)}</div>
           <button class="btn-icon" id="btn-achievements">🏆</button>
         </div>
 
         <div class="home-pet-area" id="pet-container"></div>
 
         <div class="pet-name-display">
-          <span class="pet-name-label">${state.petName}</span>
-          <span class="pet-stage-label">${stageInfo.name}</span>
+          <span class="pet-name-label" id="pet-name-label">${activePet.name}</span>
+          <span class="pet-stage-label" id="pet-stage-label">${stageInfo.name}</span>
         </div>
 
-        <div class="stat-bars" id="stat-bars">${this.renderStatBars(state)}</div>
+        <div id="jealousy-alert" class="jealousy-alert" style="display:none"></div>
+
+        <div class="stat-bars" id="stat-bars">${this.renderStatBars(activePet.stats)}</div>
 
         <div class="bond-bar">
-          <div class="bond-label">유대감 ${state.petStats.bond} / ${this.getNextThreshold(state)}</div>
-          <div class="bond-track"><div class="bond-fill" style="width:${this.getBondPercent(state)}%"></div></div>
+          <div class="bond-label" id="bond-label">유대감 ${activePet.stats.bond} / ${this.getNextThreshold(activePet)}</div>
+          <div class="bond-track"><div class="bond-fill" id="bond-fill" style="width:${this.getBondPercent(activePet)}%"></div></div>
         </div>
 
         <div class="action-grid">
@@ -102,34 +109,70 @@ export class HomeScene implements Scene {
       </div>
     `;
 
-    // Canvas 펫 렌더러 설치
+    // Canvas 멀티펫 렌더러
     const container = root.querySelector('#pet-container') as HTMLElement;
-    this.petCanvas = new PetCanvas(container, state.petType!, stage, stageInfo.size);
+    this.petCanvas = new PetCanvas(container);
+    this.petCanvas.setPets(state.pets);
+    this.petCanvas.setActivePet(state.activePetIndex);
     if (isSleeping) this.petCanvas.setEmotion('sleeping');
     this.petCanvas.setFurniture(state.ownedFurniture.map(id => getItemById(id)?.emoji ?? ''));
-    if (state.equippedAccessory) {
-      this.petCanvas.setAccessory(getItemById(state.equippedAccessory)?.emoji ?? null);
+    if (activePet.equippedAccessory) {
+      this.petCanvas.setAccessory(getItemById(activePet.equippedAccessory)?.emoji ?? null);
     }
-    this.petCanvas.setStats(state.petStats);
+    this.petCanvas.setStats(activePet.stats);
     this.petCanvas.start();
     this.cleanups.push(() => this.petCanvas?.stop());
 
     this.bindActions(root);
+    this.bindPetTabs(root);
+    this.updateJealousyAlert(root);
     this.startAutoSave();
   }
 
-  private renderStatBars(state: PetPalState): string {
-    const stats = [
-      { key: 'hunger', label: '배고픔', emoji: '🍖', color: COLORS.stat.hunger },
-      { key: 'happiness', label: '행복', emoji: '😊', color: COLORS.stat.happiness },
-      { key: 'cleanliness', label: '청결', emoji: '✨', color: COLORS.stat.cleanliness },
-      { key: 'energy', label: '기력', emoji: '⚡', color: COLORS.stat.energy },
-    ] as const;
-    return stats.map(s => `
+  private processLoginRewards(): void {
+    const loginResult = processLogin(this.ctx.state.current);
+    this.ctx.state.current = loginResult.state;
+    if (loginResult.reward > 0) {
+      showToast(`출석 보상: ${loginResult.reward}G (${loginResult.chainDay}일차)`);
+    }
+    if (loginResult.streakMilestone) {
+      showToast(`연속 ${this.ctx.state.current.streak}일 출석! +${loginResult.streakMilestone}G`);
+    }
+  }
+
+  private renderPetTabs(state: PetPalState): string {
+    const tabs = state.pets.map((pet, i) => {
+      const stage = getGrowthStage(pet.type, pet.stats.bond);
+      const emoji = PETS[pet.type].stages[stage].emoji;
+      const isActive = i === state.activePetIndex;
+      const hasJealousy = pet.jealousy > 30;
+      return `<button class="pet-tab ${isActive ? 'active' : ''} ${hasJealousy ? 'jealous' : ''}"
+                      data-pet-index="${i}" title="${pet.name}">
+        ${emoji}
+      </button>`;
+    }).join('');
+
+    // + 버튼 (슬롯 여유가 있을 때)
+    const canAdd = state.unlockedSlots > state.pets.length;
+    const addBtn = canAdd
+      ? '<button class="pet-tab pet-tab-add" id="btn-add-pet" title="새 펫 추가">+</button>'
+      : '';
+
+    return tabs + addBtn;
+  }
+
+  private renderStatBars(stats: PetStats): string {
+    const statDefs = [
+      { key: 'hunger' as const, label: '배고픔', emoji: '🍖', color: COLORS.stat.hunger },
+      { key: 'happiness' as const, label: '행복', emoji: '😊', color: COLORS.stat.happiness },
+      { key: 'cleanliness' as const, label: '청결', emoji: '✨', color: COLORS.stat.cleanliness },
+      { key: 'energy' as const, label: '기력', emoji: '⚡', color: COLORS.stat.energy },
+    ];
+    return statDefs.map(s => `
       <div class="stat-row">
         <span class="stat-emoji">${s.emoji}</span>
-        <div class="stat-track"><div class="stat-fill" style="width:${state.petStats[s.key]}%;background:${s.color}"></div></div>
-        <span class="stat-value">${Math.round(state.petStats[s.key])}</span>
+        <div class="stat-track"><div class="stat-fill" style="width:${stats[s.key]}%;background:${s.color}"></div></div>
+        <span class="stat-value">${Math.round(stats[s.key])}</span>
       </div>
     `).join('');
   }
@@ -139,7 +182,7 @@ export class HomeScene implements Scene {
     const done = allDailyTasksDone(state);
     return `
       <div class="daily-header">
-        <span>📋 오늘의 할일</span>
+        <span>오늘의 할일</span>
         ${done && !state.dailyTasksClaimed ? `<button class="btn-small btn-accent" id="btn-claim-daily">보상받기 (+${getDailyRewardTotal(state)}G)</button>` : ''}
       </div>
       <div class="daily-tasks">
@@ -153,21 +196,48 @@ export class HomeScene implements Scene {
     `;
   }
 
-  private getNextThreshold(state: PetPalState): number {
-    const thresholds = PETS[state.petType!].evolutionThresholds;
-    for (const t of thresholds) { if (state.petStats.bond < t) return t; }
-    return state.petStats.bond;
+  private getNextThreshold(pet: PetData): number {
+    const thresholds = PETS[pet.type].evolutionThresholds;
+    for (const t of thresholds) { if (pet.stats.bond < t) return t; }
+    return pet.stats.bond;
   }
 
-  private getBondPercent(state: PetPalState): number {
-    const thresholds = [0, ...PETS[state.petType!].evolutionThresholds];
-    const bond = state.petStats.bond;
+  private getBondPercent(pet: PetData): number {
+    const thresholds = [0, ...PETS[pet.type].evolutionThresholds];
+    const bond = pet.stats.bond;
     for (let i = 1; i < thresholds.length; i++) {
       if (bond < thresholds[i]) {
         return ((bond - thresholds[i - 1]) / (thresholds[i] - thresholds[i - 1])) * 100;
       }
     }
     return 100;
+  }
+
+  private bindPetTabs(root: HTMLElement): void {
+    root.querySelectorAll('.pet-tab[data-pet-index]').forEach(btn => {
+      const handler = (): void => {
+        const idx = parseInt((btn as HTMLElement).dataset.petIndex ?? '0', 10);
+        this.ctx.sound.playClick();
+        this.ctx.state.current.activePetIndex = idx;
+        this.ctx.save.save(this.ctx.state.current);
+        // 전체 UI 새로고침
+        this.ctx.scenes.switchTo(() => new HomeScene(this.ctx));
+      };
+      btn.addEventListener('click', handler);
+      this.cleanups.push(() => btn.removeEventListener('click', handler));
+    });
+
+    const addBtn = root.querySelector('#btn-add-pet');
+    if (addBtn) {
+      const handler = (): void => {
+        this.ctx.sound.playClick();
+        import('./PetSelectScene').then(m => {
+          this.ctx.scenes.switchTo(() => new m.PetSelectScene(this.ctx, 'add'));
+        }).catch(err => console.error('[HomeScene] PetSelect load failed', err));
+      };
+      addBtn.addEventListener('click', handler);
+      this.cleanups.push(() => addBtn.removeEventListener('click', handler));
+    }
   }
 
   private bindActions(root: HTMLElement): void {
@@ -180,10 +250,8 @@ export class HomeScene implements Scene {
       this.cleanups.push(() => btn.removeEventListener('click', handler));
     });
 
-    // Daily claim
     this.bindDailyClaim(root);
 
-    // Achievements button
     const achBtn = root.querySelector('#btn-achievements');
     if (achBtn) {
       const handler = (): void => {
@@ -217,63 +285,60 @@ export class HomeScene implements Scene {
   }
 
   private handleAction(action: string, root: HTMLElement): void {
-    // 쿨다운 체크
-    const cooldown = COOLDOWNS[action];
-    if (cooldown) {
-      const last = this.lastActionTime[action] ?? 0;
-      const remaining = cooldown - (Date.now() - last);
-      if (remaining > 0) {
-        showToast(`${Math.ceil(remaining / 1000)}초 후에 다시 할 수 있어요`);
-        return;
-      }
-      this.lastActionTime[action] = Date.now();
-    }
+    if (this.checkCooldown(action)) return;
 
     const state = this.ctx.state.current;
+    const idx = state.activePetIndex;
 
     switch (action) {
       case 'feed':
-        state.petStats = applyEffects(state.petStats, { hunger: 25, bond: 1 });
-        state.totalFeeds++;
-        this.ctx.state.current = updateDailyProgress(state, 'feed');
+        this.ctx.state.current = applyEffectsToPet(state, idx, { hunger: 25, bond: 1 }, 'feed');
+        this.ctx.state.current.totalFeeds++;
+        this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'feed');
         this.petCanvas?.setEmotion('eating');
-        this.petCanvas?.showSpeech('맛있어! 😋');
+        this.petCanvas?.showSpeech('맛있어!');
         this.petCanvas?.emitParticles('sparkle', 5);
+        this.petCanvas?.triggerJealousy();
         this.ctx.sound.playHarvest();
         break;
       case 'play':
-        state.petStats = applyEffects(state.petStats, { happiness: 30, energy: -10, bond: 2 });
-        state.totalPlays++;
-        this.ctx.state.current = updateDailyProgress(state, 'play');
+        this.ctx.state.current = applyEffectsToPet(state, idx, { happiness: 30, energy: -10, bond: 2 }, 'play');
+        this.ctx.state.current.totalPlays++;
+        this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'play');
         this.petCanvas?.setEmotion('happy');
-        this.petCanvas?.showSpeech('재밌다! 🎉');
+        this.petCanvas?.showSpeech('재밌다!');
         this.petCanvas?.emitParticles('star', 6);
+        this.petCanvas?.triggerJealousy();
         this.ctx.sound.playLucky();
         break;
       case 'walk':
-        state.petStats = applyEffects(state.petStats, { happiness: 20, energy: -15, cleanliness: -5, bond: 3 });
-        state.totalWalks++;
-        this.ctx.state.current = updateDailyProgress(state, 'walk');
+        this.ctx.state.current = applyEffectsToPet(state, idx, { happiness: 20, energy: -15, cleanliness: -5, bond: 3 }, 'walk');
+        this.ctx.state.current.totalWalks++;
+        this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'walk');
         this.petCanvas?.setEmotion('happy');
-        this.petCanvas?.showSpeech('산책 좋아! 🌳');
+        this.petCanvas?.showSpeech('산책 좋아!');
         this.petCanvas?.emitParticles('leaf', 5);
+        this.petCanvas?.triggerJealousy();
         this.ctx.sound.playMerge();
         break;
       case 'clean':
-        state.petStats = applyEffects(state.petStats, { cleanliness: 35, happiness: 5, bond: 1 });
-        state.totalBaths++;
-        this.ctx.state.current = updateDailyProgress(state, 'clean');
-        this.petCanvas?.showSpeech('깨끗해졌다! ✨');
+        this.ctx.state.current = applyEffectsToPet(state, idx, { cleanliness: 35, happiness: 5, bond: 1 }, 'clean');
+        this.ctx.state.current.totalBaths++;
+        this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'clean');
+        this.petCanvas?.showSpeech('깨끗해졌다!');
         this.petCanvas?.emitParticles('bubble', 8);
+        this.petCanvas?.triggerJealousy();
         this.ctx.sound.playWater();
         break;
       case 'talk': {
-        state.petStats = applyEffects(state.petStats, { happiness: 15, bond: 2 });
-        state.totalTalks++;
-        this.ctx.state.current = updateDailyProgress(state, 'talk');
+        this.ctx.state.current = applyEffectsToPet(state, idx, { happiness: 15, bond: 2 }, 'talk');
+        this.ctx.state.current.totalTalks++;
+        this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'talk');
+        const activeStats = getActiveStats(this.ctx.state.current);
         this.petCanvas?.setEmotion('love');
-        this.petCanvas?.showSpeech(getPetSpeech(state.petStats));
+        this.petCanvas?.showSpeech(getPetSpeech(activeStats));
         this.petCanvas?.emitParticles('heart', 6);
+        this.petCanvas?.triggerJealousy();
         this.ctx.sound.playClick();
         break;
       }
@@ -292,10 +357,23 @@ export class HomeScene implements Scene {
         return;
     }
 
-    this.checkEvolution(state);
+    this.checkEvolution();
     this.checkAchievements();
     this.ctx.save.save(this.ctx.state.current);
     this.refreshUI(root);
+  }
+
+  private checkCooldown(action: string): boolean {
+    const cooldown = COOLDOWNS[action];
+    if (!cooldown) return false;
+    const last = this.lastActionTime[action] ?? 0;
+    const remaining = cooldown - (Date.now() - last);
+    if (remaining > 0) {
+      showToast(`${Math.ceil(remaining / 1000)}초 후에 다시 할 수 있어요`);
+      return true;
+    }
+    this.lastActionTime[action] = Date.now();
+    return false;
   }
 
   private showMiniGamePicker(root: HTMLElement): void {
@@ -313,22 +391,28 @@ export class HomeScene implements Scene {
 
     overlay.querySelector('[data-game="catch"]')?.addEventListener('click', () => {
       overlay.remove();
-      import('./MiniGameScene').then(m => this.ctx.scenes.switchTo(() => new m.MiniGameScene(this.ctx)));
+      import('./MiniGameScene').then(m => this.ctx.scenes.switchTo(() => new m.MiniGameScene(this.ctx)))
+        .catch(err => console.error('[HomeScene] MiniGame load failed', err));
     });
     overlay.querySelector('[data-game="walk"]')?.addEventListener('click', () => {
       overlay.remove();
-      import('./WalkGameScene').then(m => this.ctx.scenes.switchTo(() => new m.WalkGameScene(this.ctx)));
+      import('./WalkGameScene').then(m => this.ctx.scenes.switchTo(() => new m.WalkGameScene(this.ctx)))
+        .catch(err => console.error('[HomeScene] WalkGame load failed', err));
     });
     overlay.querySelector('.mg-close')?.addEventListener('click', () => overlay.remove());
   }
 
-  private checkEvolution(state: PetPalState): void {
-    const prevStage = getGrowthStage(state.petType!, state.petStats.bond - 3);
-    const newStage = getGrowthStage(state.petType!, state.petStats.bond);
+  private checkEvolution(): void {
+    const state = this.ctx.state.current;
+    const pet = getActivePet(state);
+    if (!pet) return;
+
+    const prevStage = getGrowthStage(pet.type, pet.stats.bond - 3);
+    const newStage = getGrowthStage(pet.type, pet.stats.bond);
     if (prevStage !== newStage) {
-      const pet = PETS[state.petType!];
-      const info = pet.stages[newStage];
-      showToast(`🎉 ${state.petName}이(가) ${info.name}(으)로 성장했어요!`);
+      const petDef = PETS[pet.type];
+      const info = petDef.stages[newStage];
+      showToast(`${pet.name}이(가) ${info.name}(으)로 성장했어요!`);
       this.ctx.sound.playLevelUp();
       this.petCanvas?.updatePet(newStage, info.size);
       this.petCanvas?.emitParticles('star', 12);
@@ -341,22 +425,42 @@ export class HomeScene implements Scene {
       const result = claimAchievements(this.ctx.state.current, newAchs);
       this.ctx.state.current = result.state;
       for (const ach of newAchs) {
-        showToast(`🏆 ${ach.emoji} ${ach.name} +${ach.reward}G`);
+        showToast(`${ach.emoji} ${ach.name} +${ach.reward}G`);
       }
       this.petCanvas?.emitParticles('star', 8);
     }
   }
 
+  private updateJealousyAlert(root: HTMLElement): void {
+    const alertEl = root.querySelector('#jealousy-alert') as HTMLElement;
+    if (!alertEl) return;
+
+    const state = this.ctx.state.current;
+    const jealousPet = state.pets.find((p, i) => i !== state.activePetIndex && p.jealousy > 30);
+    if (jealousPet) {
+      alertEl.style.display = 'block';
+      alertEl.textContent = `${jealousPet.name}이(가) 질투하고 있어요!`;
+    } else {
+      alertEl.style.display = 'none';
+    }
+  }
+
   private refreshUI(root: HTMLElement): void {
     const state = this.ctx.state.current;
+    const pet = getActivePet(state);
+    if (!pet) return;
+
     const statBars = root.querySelector('#stat-bars');
-    if (statBars) statBars.innerHTML = this.renderStatBars(state);
+    if (statBars) statBars.innerHTML = this.renderStatBars(pet.stats);
 
     const goldEl = root.querySelector('#gold-amount');
     if (goldEl) goldEl.textContent = String(state.gold);
 
     const moodEl = root.querySelector('#mood-display');
-    if (moodEl) moodEl.textContent = moodEmoji(state.petStats);
+    if (moodEl) moodEl.textContent = moodEmoji(pet.stats);
+
+    const nameEl = root.querySelector('#pet-name-label');
+    if (nameEl) nameEl.textContent = pet.name;
 
     const dailyStrip = root.querySelector('#daily-strip');
     if (dailyStrip) {
@@ -364,13 +468,24 @@ export class HomeScene implements Scene {
       this.bindDailyClaim(root);
     }
 
-    const bondFill = root.querySelector('.bond-fill') as HTMLElement;
-    const bondLabel = root.querySelector('.bond-label') as HTMLElement;
-    if (bondFill) bondFill.style.width = `${this.getBondPercent(state)}%`;
-    if (bondLabel) bondLabel.textContent = `유대감 ${state.petStats.bond} / ${this.getNextThreshold(state)}`;
+    const bondFill = root.querySelector('#bond-fill') as HTMLElement;
+    const bondLabel = root.querySelector('#bond-label') as HTMLElement;
+    if (bondFill) bondFill.style.width = `${this.getBondPercent(pet)}%`;
+    if (bondLabel) bondLabel.textContent = `유대감 ${pet.stats.bond} / ${this.getNextThreshold(pet)}`;
 
-    // Canvas에 스탯 동기화 (자발적 감정용)
-    this.petCanvas?.setStats(state.petStats);
+    // Pet tabs 업데이트
+    const tabsEl = root.querySelector('#pet-tabs');
+    if (tabsEl) {
+      tabsEl.innerHTML = this.renderPetTabs(state);
+      this.bindPetTabs(root);
+    }
+
+    // Canvas 동기화
+    this.petCanvas?.setPets(state.pets);
+    this.petCanvas?.setActivePet(state.activePetIndex);
+    this.petCanvas?.setStats(pet.stats);
+
+    this.updateJealousyAlert(root);
   }
 
   private startAutoSave(): void {

@@ -8,6 +8,7 @@ import type { AppContext } from '../app/AppContext';
 import type { PetPalState } from '../data/state';
 import type { SceneManager } from './SceneManager';
 import { PETS, getGrowthStage } from '../data/pets';
+import { getActivePet, applyEffectsToPet } from '../data/state';
 import { drawPet, createAnimState, updateAnimState } from '../game/PetRenderer';
 import { showToast } from '../ui/Toast';
 
@@ -43,9 +44,9 @@ export class WalkGameScene implements Scene {
 
   constructor(ctx: Ctx) {
     this.ctx = ctx;
-    const state = ctx.state.current;
-    this.petType = state.petType!;
-    this.petStage = getGrowthStage(state.petType!, state.petStats.bond);
+    const activePet = getActivePet(ctx.state.current);
+    this.petType = activePet?.type ?? 'dog';
+    this.petStage = getGrowthStage(this.petType, activePet?.stats.bond ?? 0);
   }
 
   mount(root: HTMLElement): void {
@@ -256,13 +257,13 @@ export class WalkGameScene implements Scene {
     this.running = false;
     cancelAnimationFrame(this.frameId);
 
-    const state = this.ctx.state.current;
+    let state = this.ctx.state.current;
     state.totalMiniGamesPlayed++;
     const goldReward = Math.floor(this.score / 3) + Math.floor(this.distance / 5);
     state.gold += goldReward;
     state.totalGoldEarned += goldReward;
-    state.petStats.happiness = Math.min(100, state.petStats.happiness + 15);
-    state.petStats.bond += 3;
+    state = applyEffectsToPet(state, state.activePetIndex, { happiness: 15, bond: 3 });
+    this.ctx.state.current = state;
     this.ctx.save.save(state);
 
     const overlay = document.querySelector('#walk-overlay') as HTMLElement;

@@ -1,10 +1,11 @@
 /**
- * PetCanvas -- 인터랙티브 펫 Canvas
- * 클릭→이동, 터치 영역별 반응, 자발적 감정, 말풍선, 방 배경
+ * PetCanvas -- 인터랙티브 멀티펫 Canvas (최대 3마리)
+ * 각 펫이 독립적으로 걸어다니고, 클릭 반응, 질투 표현
  */
 
 import type { PetType, GrowthStage } from '../data/pets';
-import type { PetStats } from '../data/state';
+import type { PetStats, PetData } from '../data/state';
+import { getGrowthStage, PETS } from '../data/pets';
 import { drawPet, createAnimState, updateAnimState, type PetAnimState } from './PetRenderer';
 import { ParticleSystem, type ParticleType } from './Particles';
 import { getTimeOfDay } from '../data/time-guard';
@@ -12,63 +13,51 @@ import { getTimeOfDay } from '../data/time-guard';
 /** 말풍선 콜백 */
 export type SpeechCallback = (text: string) => void;
 
+/** Canvas 내부 펫 상태 */
+interface CanvasPet {
+  type: PetType;
+  stage: GrowthStage;
+  size: number;
+  anim: PetAnimState;
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  isMoving: boolean;
+  facingLeft: boolean;
+  jealousy: number;
+  name: string;
+  speechText: string;
+  speechAlpha: number;
+  speechTimer: number;
+  idleEmotionTimer: number;
+  stats: PetStats | null;
+  accessory: string | null;
+}
+
 export class PetCanvas {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private anim: PetAnimState;
   private particles: ParticleSystem;
   private frameId = 0;
   private lastTime = 0;
   private W: number;
   private H: number;
-  private petType: PetType;
-  private stage: GrowthStage;
-  private petSize: number;
   private furniture: string[] = [];
-  private accessory: string | null = null;
   private season: 'spring' | 'summer' | 'autumn' | 'winter' = 'spring';
   private ambientTimer = 0;
-
-  // 인터랙티브: 펫 위치 + 이동
-  private petX: number;
-  private petY: number;
-  private targetX: number;
-  private targetY: number;
-  private isMoving = false;
-  private moveSpeed = 60; // px/s
-  private facingLeft = false;
-
-  // 자발적 감정
-  private petStats: PetStats | null = null;
-  private idleEmotionTimer = 0;
-  private speechTimer = 0;
+  private moveSpeed = 60;
   private onSpeech: SpeechCallback | null = null;
 
-  // 말풍선
-  private speechText = '';
-  private speechAlpha = 0;
+  private pets: CanvasPet[] = [];
+  private activePetIndex = 0;
 
-  constructor(
-    container: HTMLElement,
-    petType: PetType,
-    stage: GrowthStage,
-    petSize: number,
-  ) {
-    this.petType = petType;
-    this.stage = stage;
-    this.petSize = petSize;
-    this.anim = createAnimState();
+  constructor(container: HTMLElement) {
     this.particles = new ParticleSystem();
     this.season = this.getCurrentSeason();
 
     this.W = Math.min(container.clientWidth || 350, 390);
     this.H = Math.min(container.clientHeight || 180, 180);
-
-    // 펫 초기 위치 (중앙)
-    this.petX = this.W / 2;
-    this.petY = this.H * 0.55;
-    this.targetX = this.petX;
-    this.targetY = this.petY;
 
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.W * 2;
@@ -83,8 +72,68 @@ export class PetCanvas {
     this.ctx = ctx2d;
     this.ctx.scale(2, 2);
 
-    // 클릭→이동 + 터치 반응
     this.canvas.addEventListener('click', (e) => this.handleClick(e));
+  }
+
+  /** PetData 배열로 Canvas 내부 상태 동기화 */
+  setPets(petDataList: PetData[]): void {
+    const positions = this.getInitialPositions(petDataList.length);
+
+    // 기존 펫 업데이트 또는 새 펫 추가
+    const newPets: CanvasPet[] = petDataList.map((pd, i) => {
+      const existing = this.pets[i];
+      const stage = getGrowthStage(pd.type, pd.stats.bond);
+      const stageInfo = PETS[pd.type].stages[stage];
+      const pos = positions[i];
+
+      if (existing && existing.type === pd.type) {
+        // 기존 펫 유지, 데이터만 갱신
+        existing.stage = stage;
+        existing.size = stageInfo.size;
+        existing.jealousy = pd.jealousy;
+        existing.name = pd.name;
+        existing.stats = pd.stats;
+        return existing;
+      }
+
+      return this.createCanvasPet(pd, stage, stageInfo.size, pos.x, pos.y);
+    });
+
+    this.pets = newPets;
+  }
+
+  setActivePet(index: number): void {
+    this.activePetIndex = index;
+  }
+
+  private createCanvasPet(
+    pd: PetData, stage: GrowthStage, size: number, x: number, y: number,
+  ): CanvasPet {
+    return {
+      type: pd.type,
+      stage,
+      size,
+      anim: createAnimState(),
+      x, y,
+      targetX: x, targetY: y,
+      isMoving: false,
+      facingLeft: false,
+      jealousy: pd.jealousy,
+      name: pd.name,
+      speechText: '',
+      speechAlpha: 0,
+      speechTimer: 0,
+      idleEmotionTimer: 5 + Math.random() * 10,
+      stats: pd.stats,
+      accessory: pd.equippedAccessory,
+    };
+  }
+
+  private getInitialPositions(count: number): Array<{ x: number; y: number }> {
+    const y = this.H * 0.55;
+    if (count === 1) return [{ x: this.W / 2, y }];
+    if (count === 2) return [{ x: this.W * 0.3, y }, { x: this.W * 0.7, y }];
+    return [{ x: this.W * 0.2, y }, { x: this.W * 0.5, y }, { x: this.W * 0.8, y }];
   }
 
   private handleClick(e: MouseEvent): void {
@@ -92,46 +141,61 @@ export class PetCanvas {
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
 
-    // 펫 영역 판정 (반경 체크)
-    const dx = clickX - this.petX;
-    const dy = clickY - this.petY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const hitRadius = this.petSize * 0.5;
-
-    if (dist < hitRadius) {
-      // 펫 터치! 영역별 반응
-      this.handlePetTouch(clickX, clickY);
-    } else {
-      // 바닥 클릭 → 펫이 그쪽으로 이동
-      const floorY = this.H * 0.78;
-      const clampedY = Math.min(clickY, floorY - 10);
-      const clampedX = Math.max(30, Math.min(this.W - 30, clickX));
-      this.targetX = clampedX;
-      this.targetY = Math.max(this.H * 0.35, clampedY);
-      this.isMoving = true;
-      this.facingLeft = this.targetX < this.petX;
-      // 발자국 파티클
-      this.particles.emit(this.petX, this.petY + 15, 'sparkle', 2);
+    // 펫 영역 판정: 가장 가까운 펫 찾기
+    const closest = this.findClosestPet(clickX, clickY);
+    if (closest) {
+      this.handlePetTouch(closest, clickX, clickY);
+      return;
     }
+
+    // 바닥 클릭 -> 활성 펫만 이동
+    const activePet = this.pets[this.activePetIndex];
+    if (!activePet) return;
+    this.movePetTo(activePet, clickX, clickY);
   }
 
-  private handlePetTouch(x: number, y: number): void {
-    const headY = this.petY - this.petSize * 0.25;
+  private findClosestPet(x: number, y: number): CanvasPet | null {
+    let best: CanvasPet | null = null;
+    let bestDist = Infinity;
+
+    for (const pet of this.pets) {
+      const dx = x - pet.x;
+      const dy = y - pet.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const hitRadius = pet.size * 0.5;
+      if (dist < hitRadius && dist < bestDist) {
+        best = pet;
+        bestDist = dist;
+      }
+    }
+    return best;
+  }
+
+  private movePetTo(pet: CanvasPet, clickX: number, clickY: number): void {
+    const floorY = this.H * 0.78;
+    const clampedY = Math.min(clickY, floorY - 10);
+    const clampedX = Math.max(30, Math.min(this.W - 30, clickX));
+    pet.targetX = clampedX;
+    pet.targetY = Math.max(this.H * 0.35, clampedY);
+    pet.isMoving = true;
+    pet.facingLeft = pet.targetX < pet.x;
+    this.particles.emit(pet.x, pet.y + 15, 'sparkle', 2);
+  }
+
+  private handlePetTouch(pet: CanvasPet, x: number, y: number): void {
+    const headY = pet.y - pet.size * 0.25;
 
     if (y < headY) {
-      // 머리 터치 → 쓰다듬기
-      this.setEmotion('love');
-      this.showSpeech('기분 좋아~! ❤️');
+      this.setPetEmotion(pet, 'love');
+      this.showPetSpeech(pet, '기분 좋아~!');
       this.particles.emit(x, y, 'heart', 5);
-    } else if (y > this.petY + this.petSize * 0.15) {
-      // 발/아래 터치 → 간지럽
-      this.setEmotion('happy');
-      this.showSpeech('간지러워! 😆');
+    } else if (y > pet.y + pet.size * 0.15) {
+      this.setPetEmotion(pet, 'happy');
+      this.showPetSpeech(pet, '간지러워!');
       this.particles.emit(x, y, 'star', 4);
     } else {
-      // 몸통 터치 → 안기
-      this.setEmotion('love');
-      this.showSpeech('따뜻해~! 🥰');
+      this.setPetEmotion(pet, 'love');
+      this.showPetSpeech(pet, '따뜻해~!');
       this.particles.emit(x, y, 'heart', 3);
       this.particles.emit(x, y, 'sparkle', 3);
     }
@@ -146,32 +210,45 @@ export class PetCanvas {
     cancelAnimationFrame(this.frameId);
   }
 
+  /** 활성 펫의 감정 설정 */
   setEmotion(emotion: PetAnimState['emotion']): void {
-    this.anim.emotion = emotion;
+    const pet = this.pets[this.activePetIndex];
+    if (pet) this.setPetEmotion(pet, emotion);
+  }
+
+  private setPetEmotion(pet: CanvasPet, emotion: PetAnimState['emotion']): void {
+    pet.anim.emotion = emotion;
     setTimeout(() => {
-      if (this.anim.emotion === emotion) this.anim.emotion = 'neutral';
+      if (pet.anim.emotion === emotion) pet.anim.emotion = 'neutral';
     }, 2500);
   }
 
+  /** 활성 펫에 말풍선 표시 */
   showSpeech(text: string): void {
-    this.speechText = text;
-    this.speechAlpha = 1;
-    this.speechTimer = 2.5;
+    const pet = this.pets[this.activePetIndex];
+    if (pet) this.showPetSpeech(pet, text);
+  }
+
+  private showPetSpeech(pet: CanvasPet, text: string): void {
+    pet.speechText = text;
+    pet.speechAlpha = 1;
+    pet.speechTimer = 2.5;
     this.onSpeech?.(text);
   }
 
   emitParticles(type: ParticleType, count: number = 5): void {
-    this.particles.emit(this.petX, this.petY - 10, type, count);
+    const pet = this.pets[this.activePetIndex];
+    if (pet) this.particles.emit(pet.x, pet.y - 10, type, count);
   }
 
   updatePet(stage: GrowthStage, size: number): void {
-    this.stage = stage;
-    this.petSize = size;
+    const pet = this.pets[this.activePetIndex];
+    if (pet) { pet.stage = stage; pet.size = size; }
   }
 
-  /** 스탯 연동 — 자발적 감정에 사용 */
   setStats(stats: PetStats): void {
-    this.petStats = stats;
+    const pet = this.pets[this.activePetIndex];
+    if (pet) pet.stats = stats;
   }
 
   setSpeechCallback(cb: SpeechCallback): void {
@@ -183,24 +260,50 @@ export class PetCanvas {
   }
 
   setAccessory(acc: string | null): void {
-    this.accessory = acc;
+    const pet = this.pets[this.activePetIndex];
+    if (pet) pet.accessory = acc;
   }
 
   getCanvas(): HTMLCanvasElement {
     return this.canvas;
   }
 
+  /** 질투 반응 트리거 (활성 펫에 액션 시 호출) */
+  triggerJealousy(): void {
+    for (let i = 0; i < this.pets.length; i++) {
+      if (i === this.activePetIndex) continue;
+      const pet = this.pets[i];
+      this.applyJealousyReaction(pet);
+    }
+  }
+
+  private applyJealousyReaction(pet: CanvasPet): void {
+    if (pet.jealousy > 80) {
+      this.showPetSpeech(pet, '나도 놀아줘!');
+      this.setPetEmotion(pet, 'love'); // angry not in union, use neutral after
+      pet.anim.emotion = 'neutral'; // override: sulking
+      pet.facingLeft = !pet.facingLeft;
+    } else if (pet.jealousy > 60) {
+      pet.anim.emotion = 'neutral';
+      pet.facingLeft = !pet.facingLeft;
+    } else if (pet.jealousy > 30) {
+      pet.facingLeft = !pet.facingLeft;
+    }
+  }
+
   private loop = (time: number): void => {
     const dt = Math.min((time - this.lastTime) / 1000, 0.05);
     this.lastTime = time;
 
-    updateAnimState(this.anim, dt);
-    this.particles.update(dt);
-    this.updateMovement(dt);
-    this.updateIdleEmotion(dt);
-    this.updateSpeech(dt);
+    for (const pet of this.pets) {
+      updateAnimState(pet.anim, dt);
+      this.updatePetMovement(pet, dt);
+      this.updatePetIdleEmotion(pet, dt);
+      this.updatePetSpeech(pet, dt);
+    }
 
-    // Ambient particles
+    this.particles.update(dt);
+
     this.ambientTimer -= dt;
     if (this.ambientTimer <= 0) {
       this.ambientTimer = 1.0 + Math.random() * 0.8;
@@ -211,64 +314,64 @@ export class PetCanvas {
     this.frameId = requestAnimationFrame(this.loop);
   };
 
-  private updateMovement(dt: number): void {
-    if (!this.isMoving) return;
-
-    const dx = this.targetX - this.petX;
-    const dy = this.targetY - this.petY;
+  private updatePetMovement(pet: CanvasPet, dt: number): void {
+    if (!pet.isMoving) return;
+    const dx = pet.targetX - pet.x;
+    const dy = pet.targetY - pet.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist < 3) {
-      this.petX = this.targetX;
-      this.petY = this.targetY;
-      this.isMoving = false;
+      pet.x = pet.targetX;
+      pet.y = pet.targetY;
+      pet.isMoving = false;
       return;
     }
 
     const step = this.moveSpeed * dt;
-    this.petX += (dx / dist) * step;
-    this.petY += (dy / dist) * step;
-    this.facingLeft = dx < 0;
+    pet.x += (dx / dist) * step;
+    pet.y += (dy / dist) * step;
+    pet.facingLeft = dx < 0;
   }
 
-  /** 스탯 기반 자발적 감정 */
-  private updateIdleEmotion(dt: number): void {
-    if (!this.petStats) return;
-    this.idleEmotionTimer -= dt;
-    if (this.idleEmotionTimer > 0) return;
-    this.idleEmotionTimer = 8 + Math.random() * 12;
+  private updatePetIdleEmotion(pet: CanvasPet, dt: number): void {
+    if (!pet.stats) return;
+    pet.idleEmotionTimer -= dt;
+    if (pet.idleEmotionTimer > 0) return;
+    pet.idleEmotionTimer = 8 + Math.random() * 12;
 
-    // neutral 상태일 때만 자발적 감정
-    if (this.anim.emotion !== 'neutral') return;
+    if (pet.anim.emotion !== 'neutral') return;
 
-    const s = this.petStats;
+    const s = pet.stats;
     if (s.hunger < 25) {
-      this.showSpeech('배고파... 🍖');
-      this.setEmotion('eating');
+      this.showPetSpeech(pet, '배고파...');
+      this.setPetEmotion(pet, 'eating');
     } else if (s.happiness < 25) {
-      this.showSpeech('심심해... 😔');
+      this.showPetSpeech(pet, '심심해...');
     } else if (s.cleanliness < 25) {
-      this.showSpeech('더러워... 🛁');
+      this.showPetSpeech(pet, '더러워...');
     } else if (s.energy < 20) {
-      this.showSpeech('졸려... 💤');
-      this.setEmotion('sleeping');
+      this.showPetSpeech(pet, '졸려...');
+      this.setPetEmotion(pet, 'sleeping');
     } else if (s.happiness > 80 && Math.random() < 0.5) {
-      this.showSpeech(['기분 좋아! 😊', '놀자! 🎾', '사랑해! ❤️'][Math.floor(Math.random() * 3)]);
-      this.setEmotion('happy');
+      this.showPetSpeech(pet, ['기분 좋아!', '놀자!', '사랑해!'][Math.floor(Math.random() * 3)]);
+      this.setPetEmotion(pet, 'happy');
     } else if (Math.random() < 0.3) {
-      // 랜덤 자발적 행동: 방 안 걸어다니기
-      this.targetX = 40 + Math.random() * (this.W - 80);
-      this.targetY = this.H * 0.4 + Math.random() * (this.H * 0.3);
-      this.isMoving = true;
-      this.facingLeft = this.targetX < this.petX;
+      this.startRandomWalk(pet);
     }
   }
 
-  private updateSpeech(dt: number): void {
-    if (this.speechTimer > 0) {
-      this.speechTimer -= dt;
-      if (this.speechTimer <= 0.5) {
-        this.speechAlpha = Math.max(0, this.speechTimer / 0.5);
+  private startRandomWalk(pet: CanvasPet): void {
+    pet.targetX = 40 + Math.random() * (this.W - 80);
+    pet.targetY = this.H * 0.4 + Math.random() * (this.H * 0.3);
+    pet.isMoving = true;
+    pet.facingLeft = pet.targetX < pet.x;
+  }
+
+  private updatePetSpeech(pet: CanvasPet, dt: number): void {
+    if (pet.speechTimer > 0) {
+      pet.speechTimer -= dt;
+      if (pet.speechTimer <= 0.5) {
+        pet.speechAlpha = Math.max(0, pet.speechTimer / 0.5);
       }
     }
   }
@@ -281,68 +384,105 @@ export class PetCanvas {
     this.drawFloor(c);
     this.drawFurniture(c);
 
-    // Pet (좌우 반전 지원)
-    c.save();
-    if (this.facingLeft) {
-      c.translate(this.petX, 0);
-      c.scale(-1, 1);
-      c.translate(-this.petX, 0);
-    }
-    drawPet(c, this.petType, this.stage, this.anim, this.petX, this.petY, this.petSize);
-    c.restore();
+    // 모든 펫 렌더 (y 순서로 정렬해서 깊이감)
+    const sorted = this.pets
+      .map((pet, i) => ({ pet, index: i }))
+      .sort((a, b) => a.pet.y - b.pet.y);
 
-    // Accessory
-    if (this.accessory) {
-      c.font = '16px Apple Color Emoji, Segoe UI Emoji';
-      c.textAlign = 'center';
-      c.fillText(this.accessory, this.petX + this.petSize * 0.2, this.petY - this.petSize * 0.3 + this.anim.bounceY);
-    }
-
-    // 이동 중 발자국
-    if (this.isMoving) {
-      c.fillStyle = 'rgba(0,0,0,0.05)';
-      c.beginPath();
-      c.arc(this.petX, this.petY + this.petSize * 0.3, 3, 0, Math.PI * 2);
-      c.fill();
-    }
-
-    // 말풍선
-    if (this.speechTimer > 0 && this.speechAlpha > 0) {
-      this.drawSpeechBubble(c);
+    for (const { pet, index } of sorted) {
+      this.renderSinglePet(c, pet, index === this.activePetIndex);
     }
 
     this.particles.render(c);
   }
 
-  private drawSpeechBubble(c: CanvasRenderingContext2D): void {
-    c.globalAlpha = this.speechAlpha;
-    const bubbleX = this.petX;
-    const bubbleY = this.petY - this.petSize * 0.5 - 20;
+  private renderSinglePet(
+    c: CanvasRenderingContext2D, pet: CanvasPet, isActive: boolean,
+  ): void {
+    c.save();
+    if (pet.facingLeft) {
+      c.translate(pet.x, 0);
+      c.scale(-1, 1);
+      c.translate(-pet.x, 0);
+    }
+    drawPet(c, pet.type, pet.stage, pet.anim, pet.x, pet.y, pet.size);
+    c.restore();
+
+    // Accessory
+    if (pet.accessory) {
+      c.font = '16px Apple Color Emoji, Segoe UI Emoji';
+      c.textAlign = 'center';
+      c.fillText(
+        pet.accessory, pet.x + pet.size * 0.2,
+        pet.y - pet.size * 0.3 + pet.anim.bounceY,
+      );
+    }
+
+    // 이동 중 발자국
+    if (pet.isMoving) {
+      c.fillStyle = 'rgba(0,0,0,0.05)';
+      c.beginPath();
+      c.arc(pet.x, pet.y + pet.size * 0.3, 3, 0, Math.PI * 2);
+      c.fill();
+    }
+
+    // 이름 태그
+    this.drawNameTag(c, pet, isActive);
+
+    // 말풍선
+    if (pet.speechTimer > 0 && pet.speechAlpha > 0) {
+      this.drawSpeechBubble(c, pet);
+    }
+  }
+
+  private drawNameTag(
+    c: CanvasRenderingContext2D, pet: CanvasPet, isActive: boolean,
+  ): void {
+    if (this.pets.length <= 1) return; // 1마리면 이름 태그 불필요
+
+    const tagY = pet.y + pet.size * 0.4;
+    c.font = `${isActive ? 'bold ' : ''}9px Quicksand, sans-serif`;
+    c.textAlign = 'center';
+
+    // 배경
+    const metrics = c.measureText(pet.name);
+    const pw = metrics.width + 8;
+    c.fillStyle = isActive ? 'rgba(255,183,77,0.85)' : 'rgba(255,255,255,0.7)';
+    c.beginPath();
+    this.roundRect(c, pet.x - pw / 2, tagY - 6, pw, 14, 4);
+    c.fill();
+
+    // 텍스트
+    c.fillStyle = isActive ? '#FFF' : '#666';
+    c.textBaseline = 'middle';
+    c.fillText(pet.name, pet.x, tagY + 1);
+  }
+
+  private drawSpeechBubble(c: CanvasRenderingContext2D, pet: CanvasPet): void {
+    c.globalAlpha = pet.speechAlpha;
+    const bubbleX = pet.x;
+    const bubbleY = pet.y - pet.size * 0.5 - 20;
 
     c.font = '12px Quicksand, sans-serif';
-    const metrics = c.measureText(this.speechText);
+    const metrics = c.measureText(pet.speechText);
     const pw = metrics.width + 16;
     const ph = 22;
 
-    // Bubble bg
     c.fillStyle = 'rgba(255,255,255,0.95)';
     c.beginPath();
     this.roundRect(c, bubbleX - pw / 2, bubbleY - ph / 2, pw, ph, 10);
     c.fill();
-    c.shadowColor = 'transparent';
 
-    // Tail
     c.beginPath();
     c.moveTo(bubbleX - 5, bubbleY + ph / 2);
     c.lineTo(bubbleX, bubbleY + ph / 2 + 6);
     c.lineTo(bubbleX + 5, bubbleY + ph / 2);
     c.fill();
 
-    // Text
     c.fillStyle = '#3D3D3D';
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    c.fillText(this.speechText, bubbleX, bubbleY);
+    c.fillText(pet.speechText, bubbleX, bubbleY);
 
     c.globalAlpha = 1;
   }
@@ -362,8 +502,12 @@ export class PetCanvas {
     c.fillStyle = grad;
     c.fillRect(0, 0, this.W, this.H);
 
-    // Window
-    if (timeOfDay !== 'night') {
+    this.drawWindow(c, timeOfDay);
+    this.drawWallPicture(c);
+  }
+
+  private drawWindow(c: CanvasRenderingContext2D, tod: string): void {
+    if (tod !== 'night') {
       c.fillStyle = '#87CEEB40';
       c.beginPath();
       this.roundRect(c, this.W - 80, 10, 55, 55, 8);
@@ -386,15 +530,16 @@ export class PetCanvas {
         c.fill();
       }
     }
+  }
 
-    // Wall picture
+  private drawWallPicture(c: CanvasRenderingContext2D): void {
     c.fillStyle = '#FFB5C240';
     c.beginPath();
     this.roundRect(c, 15, 18, 35, 42, 5);
     c.fill();
     c.font = '18px Apple Color Emoji';
     c.textAlign = 'center';
-    c.fillText('🖼️', 32, 44);
+    c.fillText('🖼', 32, 44);
   }
 
   private drawFloor(c: CanvasRenderingContext2D): void {
@@ -432,7 +577,9 @@ export class PetCanvas {
   private emitAmbientParticle(): void {
     switch (this.season) {
       case 'spring': this.particles.emitAmbient(this.W, this.H, 'petal'); break;
-      case 'summer': if (Math.random() < 0.3) this.particles.emitAmbient(this.W, this.H, 'sparkle'); break;
+      case 'summer':
+        if (Math.random() < 0.3) this.particles.emitAmbient(this.W, this.H, 'sparkle');
+        break;
       case 'autumn': this.particles.emitAmbient(this.W, this.H, 'leaf'); break;
       case 'winter': this.particles.emitAmbient(this.W, this.H, 'snowflake'); break;
     }
@@ -446,7 +593,10 @@ export class PetCanvas {
     return 'winter';
   }
 
-  private roundRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  private roundRect(
+    c: CanvasRenderingContext2D, x: number, y: number,
+    w: number, h: number, r: number,
+  ): void {
     c.moveTo(x + r, y);
     c.lineTo(x + w - r, y);
     c.quadraticCurveTo(x + w, y, x + w, y + r);

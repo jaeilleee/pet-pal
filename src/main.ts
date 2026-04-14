@@ -12,7 +12,7 @@ import { isAppsInToss } from './platform/platform';
 import { showToast } from './ui/Toast';
 import { SceneManager } from './scenes/SceneManager';
 import { TitleScene } from './scenes/TitleScene';
-import { createInitialState, migratePetStats, type PetPalState } from './data/state';
+import { createInitialState, migrateV1toV2, type PetPalState } from './data/state';
 import type { AppContext } from './app/AppContext';
 
 async function boot(): Promise<void> {
@@ -27,12 +27,8 @@ async function boot(): Promise<void> {
     legacyKey: 'pet-pal:save',
     getInitialState: createInitialState,
     deserialize: (json: string): PetPalState => {
-      const raw = JSON.parse(json) as Partial<PetPalState>;
-      return {
-        ...createInitialState(),
-        ...raw,
-        petStats: migratePetStats(raw.petStats as Partial<import('./data/state').PetStats> | undefined),
-      };
+      const raw = JSON.parse(json) as Record<string, unknown>;
+      return migrateV1toV2(raw);
     },
     onLoadFail: () => {
       showToast('저장 데이터 로드 실패. 새 게임으로 시작합니다.');

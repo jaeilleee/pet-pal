@@ -50,16 +50,16 @@ export class TitleScene implements Scene {
       this.ctx.sound.playClick();
 
       const state = this.ctx.state.current;
-      if (state.petType) {
-        // 이미 펫 선택됨 → 홈
+      if (state.pets.length > 0) {
+        // 이미 펫 선택됨 -> 홈
         import('./HomeScene').then(m => {
           this.ctx.scenes.switchTo(() => new m.HomeScene(this.ctx));
-        });
+        }).catch(err => console.error('[TitleScene] load failed', err));
       } else {
         // 펫 선택 화면
         import('./PetSelectScene').then(m => {
           this.ctx.scenes.switchTo(() => new m.PetSelectScene(this.ctx));
-        });
+        }).catch(err => console.error('[TitleScene] load failed', err));
       }
     };
     btn.addEventListener('click', handler);

@@ -45,6 +45,24 @@ export const ITEMS: ItemDef[] = [
   { id: 'scratching-post', name: '스크래쳐', emoji: '🪵', category: 'furniture', price: 45, effects: { happiness: 20, bond: 3 }, description: '고양이 스크래쳐' },
   { id: 'pool', name: '미니 풀장', emoji: '🏊', category: 'furniture', price: 80, effects: { cleanliness: 20, happiness: 15, bond: 4 }, description: '작은 수영장', unlockBond: 200 },
   { id: 'treehouse', name: '나무집', emoji: '🏠', category: 'furniture', price: 150, effects: { happiness: 25, energy: 15, bond: 8 }, description: '아늑한 나무집', unlockBond: 250 },
+
+  // === Premium Food ===
+  { id: 'wagyu', name: '와규 스테이크', emoji: '🥩', category: 'food', price: 80, effects: { hunger: 60, happiness: 25, bond: 5 }, description: '최고급 와규', unlockBond: 200 },
+  { id: 'sushi', name: '스시 세트', emoji: '🍣', category: 'food', price: 60, effects: { hunger: 50, happiness: 20, bond: 4 }, description: '신선한 스시', unlockBond: 150 },
+
+  // === Premium Snack ===
+  { id: 'macaron', name: '마카롱 세트', emoji: '🧁', category: 'snack', price: 50, effects: { happiness: 35, hunger: 10, bond: 4 }, description: '프렌치 마카롱', unlockBond: 100 },
+  { id: 'golden-bone', name: '황금 뼈다귀', emoji: '🦴', category: 'snack', price: 100, effects: { happiness: 50, bond: 8 }, description: '전설의 간식', unlockBond: 300 },
+
+  // === Premium Accessory ===
+  { id: 'diamond-collar', name: '다이아 목걸이', emoji: '💎', category: 'accessory', price: 500, effects: { happiness: 30, bond: 15 }, description: '빛나는 다이아몬드', unlockBond: 350 },
+  { id: 'angel-wings', name: '천사 날개', emoji: '🪽', category: 'accessory', price: 800, effects: { happiness: 40, bond: 20 }, description: '하늘하늘 천사 날개', unlockBond: 400 },
+  { id: 'cape', name: '슈퍼히어로 망토', emoji: '🦸', category: 'accessory', price: 300, effects: { happiness: 25, bond: 10 }, description: '멋진 망토', unlockBond: 200 },
+
+  // === Premium Furniture ===
+  { id: 'castle', name: '미니 성', emoji: '🏰', category: 'furniture', price: 1000, effects: { happiness: 40, energy: 25, bond: 15 }, description: '웅장한 미니 성', unlockBond: 350 },
+  { id: 'garden', name: '실내 정원', emoji: '🌺', category: 'furniture', price: 600, effects: { happiness: 30, cleanliness: 15, bond: 10 }, description: '꽃이 피는 정원', unlockBond: 250 },
+  { id: 'playground', name: '놀이공원', emoji: '🎡', category: 'furniture', price: 1500, effects: { happiness: 50, energy: 20, bond: 20 }, description: '미니 놀이공원', unlockBond: 400 },
 ];
 
 export function getItemById(id: string): ItemDef | undefined {

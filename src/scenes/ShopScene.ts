@@ -1,5 +1,5 @@
 /**
- * ShopScene -- 상점 (먹이/간식/액세서리/가구)
+ * ShopScene -- 상점 (먹이/간식/액세서리/가구/펫 슬롯)
  */
 
 import type { Scene } from './SceneManager';
@@ -7,22 +7,25 @@ import type { AppContext } from '../app/AppContext';
 import type { PetPalState } from '../data/state';
 import type { SceneManager } from './SceneManager';
 import { ITEMS, type ItemCategory, type ItemDef } from '../data/items';
-import { applyEffects } from '../data/state';
+import { getActivePet, applyEffectsToPet, PET_SLOT_COSTS, MAX_PETS } from '../data/state';
 import { showToast } from '../ui/Toast';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
 
-const TABS: Array<{ category: ItemCategory; label: string; emoji: string }> = [
+type ShopTab = ItemCategory | 'slot';
+
+const TABS: Array<{ category: ShopTab; label: string; emoji: string }> = [
   { category: 'food', label: '먹이', emoji: '🍖' },
   { category: 'snack', label: '간식', emoji: '🍪' },
   { category: 'accessory', label: '액세서리', emoji: '🎀' },
   { category: 'furniture', label: '가구', emoji: '🏠' },
+  { category: 'slot', label: '펫 슬롯', emoji: '🐾' },
 ];
 
 export class ShopScene implements Scene {
   private ctx: Ctx;
   private cleanups: Array<() => void> = [];
-  private activeTab: ItemCategory = 'food';
+  private activeTab: ShopTab = 'food';
 
   constructor(ctx: Ctx) {
     this.ctx = ctx;
@@ -49,7 +52,7 @@ export class ShopScene implements Scene {
       this.ctx.sound.playClick();
       import('./HomeScene').then(m => {
         this.ctx.scenes.switchTo(() => new m.HomeScene(this.ctx));
-      });
+      }).catch(err => console.error('[ShopScene] load failed', err));
     };
     backBtn.addEventListener('click', backHandler);
     this.cleanups.push(() => backBtn.removeEventListener('click', backHandler));
@@ -66,7 +69,7 @@ export class ShopScene implements Scene {
 
     tabsEl.querySelectorAll('.shop-tab').forEach(btn => {
       const handler = (): void => {
-        this.activeTab = (btn as HTMLElement).dataset.cat as ItemCategory;
+        this.activeTab = (btn as HTMLElement).dataset.cat as ShopTab;
         this.ctx.sound.playClick();
         this.renderTabs(root);
         this.renderItems(root);
@@ -77,12 +80,19 @@ export class ShopScene implements Scene {
   }
 
   private renderItems(root: HTMLElement): void {
+    if (this.activeTab === 'slot') {
+      this.renderSlotItems(root);
+      return;
+    }
+
     const itemsEl = root.querySelector('#shop-items') as HTMLElement;
     const state = this.ctx.state.current;
+    const activePet = getActivePet(state);
+    const bond = activePet?.stats.bond ?? 0;
     const items = ITEMS.filter(i => i.category === this.activeTab);
 
     itemsEl.innerHTML = items.map(item => {
-      const locked = item.unlockBond !== undefined && state.petStats.bond < item.unlockBond;
+      const locked = item.unlockBond !== undefined && bond < item.unlockBond;
       const owned = this.isOwned(item);
       const canBuy = state.gold >= item.price && !locked;
 
@@ -92,9 +102,7 @@ export class ShopScene implements Scene {
           <div class="shop-item-info">
             <span class="shop-item-name">${locked ? '???' : item.name}</span>
             <span class="shop-item-desc">${locked ? `유대감 ${item.unlockBond} 필요` : item.description}</span>
-            <div class="shop-item-effects">
-              ${this.renderEffects(item)}
-            </div>
+            <div class="shop-item-effects">${this.renderEffects(item)}</div>
           </div>
           <button class="btn-buy ${canBuy ? '' : 'disabled'}" data-id="${item.id}"
                   ${locked || (!canBuy && !owned) ? 'disabled' : ''}>
@@ -104,7 +112,73 @@ export class ShopScene implements Scene {
       `;
     }).join('');
 
-    itemsEl.querySelectorAll('.btn-buy').forEach(btn => {
+    this.bindItemButtons(itemsEl, root);
+  }
+
+  private renderSlotItems(root: HTMLElement): void {
+    const itemsEl = root.querySelector('#shop-items') as HTMLElement;
+    const state = this.ctx.state.current;
+
+    const slots = [];
+    for (let i = 1; i < MAX_PETS; i++) {
+      const slotNum = i + 1;
+      const cost = PET_SLOT_COSTS[i];
+      const unlocked = state.unlockedSlots > i;
+      const canBuy = state.gold >= cost && !unlocked;
+
+      slots.push(`
+        <div class="shop-item ${unlocked ? 'owned' : ''}">
+          <span class="shop-item-emoji">${unlocked ? '✅' : '🐾'}</span>
+          <div class="shop-item-info">
+            <span class="shop-item-name">펫 슬롯 ${slotNum}</span>
+            <span class="shop-item-desc">${unlocked ? '해금됨' : `${slotNum}번째 펫을 키울 수 있어요`}</span>
+          </div>
+          <button class="btn-buy ${canBuy ? '' : 'disabled'}" data-slot="${i}"
+                  ${unlocked || !canBuy ? 'disabled' : ''}>
+            ${unlocked ? '해금됨' : `${cost}G`}
+          </button>
+        </div>
+      `);
+    }
+
+    itemsEl.innerHTML = slots.join('');
+
+    itemsEl.querySelectorAll('.btn-buy[data-slot]').forEach(btn => {
+      const handler = (): void => {
+        const slotIdx = parseInt((btn as HTMLElement).dataset.slot ?? '0', 10);
+        this.buySlot(slotIdx, root);
+      };
+      btn.addEventListener('click', handler);
+      this.cleanups.push(() => btn.removeEventListener('click', handler));
+    });
+  }
+
+  private buySlot(slotIndex: number, root: HTMLElement): void {
+    const state = this.ctx.state.current;
+    const cost = PET_SLOT_COSTS[slotIndex];
+
+    if (state.gold < cost) {
+      showToast('골드가 부족해요!');
+      this.ctx.sound.playError();
+      return;
+    }
+
+    if (state.unlockedSlots > slotIndex) {
+      showToast('이미 해금된 슬롯이에요!');
+      return;
+    }
+
+    state.gold -= cost;
+    state.unlockedSlots = slotIndex + 1;
+    this.ctx.save.save(state);
+    this.ctx.sound.playCoin();
+    showToast(`펫 슬롯 ${slotIndex + 1} 해금!`);
+    this.updateGold(root);
+    this.renderItems(root);
+  }
+
+  private bindItemButtons(itemsEl: HTMLElement, root: HTMLElement): void {
+    itemsEl.querySelectorAll('.btn-buy[data-id]').forEach(btn => {
       const handler = (): void => {
         const id = (btn as HTMLElement).dataset.id;
         if (!id) return;
@@ -136,12 +210,14 @@ export class ShopScene implements Scene {
     if (!item) return;
 
     const state = this.ctx.state.current;
+    const activePet = getActivePet(state);
 
     // 이미 소유한 액세서리/가구: 장착
     if (this.isOwned(item)) {
-      if (item.category === 'accessory') {
-        state.equippedAccessory = state.equippedAccessory === id ? null : id;
-        showToast(state.equippedAccessory === id ? `${item.name} 장착!` : '액세서리 해제');
+      if (item.category === 'accessory' && activePet) {
+        const isEquipped = activePet.equippedAccessory === id;
+        activePet.equippedAccessory = isEquipped ? null : id;
+        showToast(!isEquipped ? `${item.name} 장착!` : '액세서리 해제');
       }
       this.ctx.save.save(state);
       this.ctx.sound.playClick();
@@ -156,25 +232,25 @@ export class ShopScene implements Scene {
     }
 
     state.gold -= item.price;
+    const idx = state.activePetIndex;
 
     if (item.category === 'food' || item.category === 'snack') {
-      // 소모품: 즉시 사용
-      state.petStats = applyEffects(state.petStats, item.effects);
+      this.ctx.state.current = applyEffectsToPet(state, idx, item.effects);
       showToast(`${item.name} 사용! ${item.emoji}`);
       this.ctx.sound.playHarvest();
     } else if (item.category === 'accessory') {
       state.ownedItems.push(id);
-      state.equippedAccessory = id;
+      if (activePet) activePet.equippedAccessory = id;
       showToast(`${item.name} 획득 + 장착!`);
       this.ctx.sound.playCoin();
     } else if (item.category === 'furniture') {
       state.ownedFurniture.push(id);
-      state.petStats = applyEffects(state.petStats, item.effects);
+      this.ctx.state.current = applyEffectsToPet(state, idx, item.effects);
       showToast(`${item.name} 설치!`);
       this.ctx.sound.playCoin();
     }
 
-    this.ctx.save.save(state);
+    this.ctx.save.save(this.ctx.state.current);
     this.updateGold(root);
     this.renderItems(root);
   }
