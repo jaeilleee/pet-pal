@@ -18,10 +18,26 @@ import { checkNewAchievements, claimAchievements } from '../data/achievements';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
 
+/** 액션 쿨다운 (ms) */
+const COOLDOWNS: Record<string, number> = {
+  feed: 30_000, play: 45_000, walk: 60_000, clean: 40_000, talk: 15_000,
+};
+
+/** 대화 응답 (스탯 연동) */
+function getPetSpeech(stats: import('../data/state').PetStats): string {
+  if (stats.hunger < 30) return '배고파... 밥 줘! 🍖';
+  if (stats.happiness < 30) return '심심해... 놀아줘! 🎾';
+  if (stats.cleanliness < 30) return '씻고 싶어... 🛁';
+  if (stats.energy < 25) return '졸려... 💤';
+  const happy = ['좋아! 💕', '고마워! 🥰', '사랑해! ❤️', '오늘 기분 좋아! 😄', '산책 가고 싶어! 🌳', '같이 놀자! 🎉', '간식 먹고 싶어~ 🍪'];
+  return happy[Math.floor(Math.random() * happy.length)];
+}
+
 export class HomeScene implements Scene {
   private ctx: Ctx;
   private cleanups: Array<() => void> = [];
   private petCanvas: PetCanvas | null = null;
+  private lastActionTime: Record<string, number> = {};
 
   constructor(ctx: Ctx) {
     this.ctx = ctx;
@@ -94,6 +110,7 @@ export class HomeScene implements Scene {
     if (state.equippedAccessory) {
       this.petCanvas.setAccessory(getItemById(state.equippedAccessory)?.emoji ?? null);
     }
+    this.petCanvas.setStats(state.petStats);
     this.petCanvas.start();
     this.cleanups.push(() => this.petCanvas?.stop());
 
@@ -200,6 +217,18 @@ export class HomeScene implements Scene {
   }
 
   private handleAction(action: string, root: HTMLElement): void {
+    // 쿨다운 체크
+    const cooldown = COOLDOWNS[action];
+    if (cooldown) {
+      const last = this.lastActionTime[action] ?? 0;
+      const remaining = cooldown - (Date.now() - last);
+      if (remaining > 0) {
+        showToast(`${Math.ceil(remaining / 1000)}초 후에 다시 할 수 있어요`);
+        return;
+      }
+      this.lastActionTime[action] = Date.now();
+    }
+
     const state = this.ctx.state.current;
 
     switch (action) {
@@ -208,6 +237,7 @@ export class HomeScene implements Scene {
         state.totalFeeds++;
         this.ctx.state.current = updateDailyProgress(state, 'feed');
         this.petCanvas?.setEmotion('eating');
+        this.petCanvas?.showSpeech('맛있어! 😋');
         this.petCanvas?.emitParticles('sparkle', 5);
         this.ctx.sound.playHarvest();
         break;
@@ -216,6 +246,7 @@ export class HomeScene implements Scene {
         state.totalPlays++;
         this.ctx.state.current = updateDailyProgress(state, 'play');
         this.petCanvas?.setEmotion('happy');
+        this.petCanvas?.showSpeech('재밌다! 🎉');
         this.petCanvas?.emitParticles('star', 6);
         this.ctx.sound.playLucky();
         break;
@@ -224,6 +255,7 @@ export class HomeScene implements Scene {
         state.totalWalks++;
         this.ctx.state.current = updateDailyProgress(state, 'walk');
         this.petCanvas?.setEmotion('happy');
+        this.petCanvas?.showSpeech('산책 좋아! 🌳');
         this.petCanvas?.emitParticles('leaf', 5);
         this.ctx.sound.playMerge();
         break;
@@ -231,17 +263,20 @@ export class HomeScene implements Scene {
         state.petStats = applyEffects(state.petStats, { cleanliness: 35, happiness: 5, bond: 1 });
         state.totalBaths++;
         this.ctx.state.current = updateDailyProgress(state, 'clean');
+        this.petCanvas?.showSpeech('깨끗해졌다! ✨');
         this.petCanvas?.emitParticles('bubble', 8);
         this.ctx.sound.playWater();
         break;
-      case 'talk':
+      case 'talk': {
         state.petStats = applyEffects(state.petStats, { happiness: 15, bond: 2 });
         state.totalTalks++;
         this.ctx.state.current = updateDailyProgress(state, 'talk');
         this.petCanvas?.setEmotion('love');
+        this.petCanvas?.showSpeech(getPetSpeech(state.petStats));
         this.petCanvas?.emitParticles('heart', 6);
         this.ctx.sound.playClick();
         break;
+      }
       case 'shop':
         import('./ShopScene')
           .then(m => this.ctx.scenes.switchTo(() => new m.ShopScene(this.ctx)))
@@ -333,6 +368,9 @@ export class HomeScene implements Scene {
     const bondLabel = root.querySelector('.bond-label') as HTMLElement;
     if (bondFill) bondFill.style.width = `${this.getBondPercent(state)}%`;
     if (bondLabel) bondLabel.textContent = `유대감 ${state.petStats.bond} / ${this.getNextThreshold(state)}`;
+
+    // Canvas에 스탯 동기화 (자발적 감정용)
+    this.petCanvas?.setStats(state.petStats);
   }
 
   private startAutoSave(): void {

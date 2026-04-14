@@ -8,6 +8,7 @@ import type { AppContext } from '../app/AppContext';
 import type { PetPalState } from '../data/state';
 import type { SceneManager } from './SceneManager';
 import { PETS, getGrowthStage } from '../data/pets';
+import { drawPet, createAnimState, updateAnimState } from '../game/PetRenderer';
 import { showToast } from '../ui/Toast';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
@@ -36,13 +37,15 @@ export class WalkGameScene implements Scene {
   private lives = 3;
   private W = 0;
   private H = 0;
-  private petEmoji = '';
+  private petType: import('../data/pets').PetType;
+  private petStage: import('../data/pets').GrowthStage;
+  private petAnim = createAnimState();
 
   constructor(ctx: Ctx) {
     this.ctx = ctx;
     const state = ctx.state.current;
-    const stage = getGrowthStage(state.petType!, state.petStats.bond);
-    this.petEmoji = PETS[state.petType!].stages[stage].emoji;
+    this.petType = state.petType!;
+    this.petStage = getGrowthStage(state.petType!, state.petStats.bond);
   }
 
   mount(root: HTMLElement): void {
@@ -235,9 +238,9 @@ export class WalkGameScene implements Scene {
       if (!obs.collected) c.fillText(obs.emoji, obs.x, obs.y);
     }
 
-    // Player pet
-    c.font = '36px Apple Color Emoji';
-    c.fillText(this.petEmoji, this.getLaneX(this.lane), this.H - 80);
+    // Player pet (Canvas 렌더)
+    updateAnimState(this.petAnim, 0.016);
+    drawPet(c, this.petType, this.petStage, this.petAnim, this.getLaneX(this.lane), this.H - 80, 50);
   }
 
   private updateUI(): void {

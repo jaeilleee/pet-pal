@@ -9,6 +9,7 @@ import type { SceneManager } from './SceneManager';
 import { PETS, getGrowthStage, bondToNextStage } from '../data/pets';
 import { overallMood, moodEmoji, generateDiaryEntry } from '../data/state';
 import { COLORS } from '../data/design-tokens';
+import { drawPet, createAnimState } from '../game/PetRenderer';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
 
@@ -43,9 +44,7 @@ export class ProfileScene implements Scene {
         </div>
 
         <div class="profile-card">
-          <div class="profile-pet">
-            <span class="profile-emoji" style="font-size:${stageInfo.size}px">${stageInfo.emoji}</span>
-          </div>
+          <div class="profile-pet" id="profile-pet-canvas"></div>
           <h3 class="profile-name">${state.petName}</h3>
           <p class="profile-stage">${stageInfo.name} · ${stageInfo.description}</p>
           <p class="profile-mood">${moodEmoji(state.petStats)} 기분: ${overallMood(state.petStats)}점</p>
@@ -85,6 +84,24 @@ export class ProfileScene implements Scene {
         </div>
       </div>
     `;
+
+    // Canvas 펫 렌더
+    const petContainer = root.querySelector('#profile-pet-canvas') as HTMLElement;
+    if (petContainer) {
+      const cvs = document.createElement('canvas');
+      const cSize = 120;
+      cvs.width = cSize * 2; cvs.height = cSize * 2;
+      cvs.style.width = `${cSize}px`; cvs.style.height = `${cSize}px`;
+      cvs.style.display = 'block'; cvs.style.margin = '0 auto 8px';
+      petContainer.appendChild(cvs);
+      const pctx = cvs.getContext('2d');
+      if (pctx) {
+        pctx.scale(2, 2);
+        const anim = createAnimState();
+        anim.emotion = 'happy';
+        drawPet(pctx, state.petType!, stage, anim, cSize / 2, cSize / 2 + 5, stageInfo.size * 0.8);
+      }
+    }
 
     const backBtn = root.querySelector('#btn-back') as HTMLElement;
     const handler = (): void => {
