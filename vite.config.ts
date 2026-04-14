@@ -20,7 +20,13 @@ export default defineConfig(({ mode }) => {
               clicker: resolve(__dirname, 'samples/clicker/index.html'),
             },
           }
-        : undefined,
+        : {
+            external: [
+              '@capacitor-community/admob',
+              '@apps-in-toss/web-framework',
+              '@capacitor/app',
+            ],
+          },
     },
     server: {
       port: 3000,

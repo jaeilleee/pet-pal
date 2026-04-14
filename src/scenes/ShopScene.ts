@@ -1,0 +1,191 @@
+/**
+ * ShopScene -- 상점 (먹이/간식/액세서리/가구)
+ */
+
+import type { Scene } from './SceneManager';
+import type { AppContext } from '../app/AppContext';
+import type { PetPalState } from '../data/state';
+import type { SceneManager } from './SceneManager';
+import { ITEMS, type ItemCategory, type ItemDef } from '../data/items';
+import { applyEffects } from '../data/state';
+import { showToast } from '../ui/Toast';
+
+type Ctx = AppContext<PetPalState, SceneManager>;
+
+const TABS: Array<{ category: ItemCategory; label: string; emoji: string }> = [
+  { category: 'food', label: '먹이', emoji: '🍖' },
+  { category: 'snack', label: '간식', emoji: '🍪' },
+  { category: 'accessory', label: '액세서리', emoji: '🎀' },
+  { category: 'furniture', label: '가구', emoji: '🏠' },
+];
+
+export class ShopScene implements Scene {
+  private ctx: Ctx;
+  private cleanups: Array<() => void> = [];
+  private activeTab: ItemCategory = 'food';
+
+  constructor(ctx: Ctx) {
+    this.ctx = ctx;
+  }
+
+  mount(root: HTMLElement): void {
+    root.innerHTML = `
+      <div class="scene shop-scene">
+        <div class="scene-header">
+          <button class="btn-back" id="btn-back">←</button>
+          <h2>상점</h2>
+          <div class="shop-gold">💰 <span id="shop-gold">${this.ctx.state.current.gold}</span>G</div>
+        </div>
+        <div class="shop-tabs" id="shop-tabs"></div>
+        <div class="shop-items" id="shop-items"></div>
+      </div>
+    `;
+
+    this.renderTabs(root);
+    this.renderItems(root);
+
+    const backBtn = root.querySelector('#btn-back') as HTMLElement;
+    const backHandler = (): void => {
+      this.ctx.sound.playClick();
+      import('./HomeScene').then(m => {
+        this.ctx.scenes.switchTo(() => new m.HomeScene(this.ctx));
+      });
+    };
+    backBtn.addEventListener('click', backHandler);
+    this.cleanups.push(() => backBtn.removeEventListener('click', backHandler));
+  }
+
+  private renderTabs(root: HTMLElement): void {
+    const tabsEl = root.querySelector('#shop-tabs') as HTMLElement;
+    tabsEl.innerHTML = TABS.map(t => `
+      <button class="shop-tab ${t.category === this.activeTab ? 'active' : ''}"
+              data-cat="${t.category}">
+        ${t.emoji} ${t.label}
+      </button>
+    `).join('');
+
+    tabsEl.querySelectorAll('.shop-tab').forEach(btn => {
+      const handler = (): void => {
+        this.activeTab = (btn as HTMLElement).dataset.cat as ItemCategory;
+        this.ctx.sound.playClick();
+        this.renderTabs(root);
+        this.renderItems(root);
+      };
+      btn.addEventListener('click', handler);
+      this.cleanups.push(() => btn.removeEventListener('click', handler));
+    });
+  }
+
+  private renderItems(root: HTMLElement): void {
+    const itemsEl = root.querySelector('#shop-items') as HTMLElement;
+    const state = this.ctx.state.current;
+    const items = ITEMS.filter(i => i.category === this.activeTab);
+
+    itemsEl.innerHTML = items.map(item => {
+      const locked = item.unlockBond !== undefined && state.petStats.bond < item.unlockBond;
+      const owned = this.isOwned(item);
+      const canBuy = state.gold >= item.price && !locked;
+
+      return `
+        <div class="shop-item ${locked ? 'locked' : ''} ${owned ? 'owned' : ''}">
+          <span class="shop-item-emoji">${locked ? '🔒' : item.emoji}</span>
+          <div class="shop-item-info">
+            <span class="shop-item-name">${locked ? '???' : item.name}</span>
+            <span class="shop-item-desc">${locked ? `유대감 ${item.unlockBond} 필요` : item.description}</span>
+            <div class="shop-item-effects">
+              ${this.renderEffects(item)}
+            </div>
+          </div>
+          <button class="btn-buy ${canBuy ? '' : 'disabled'}" data-id="${item.id}"
+                  ${locked || (!canBuy && !owned) ? 'disabled' : ''}>
+            ${owned && (item.category === 'accessory' || item.category === 'furniture') ? '장착' : `${item.price}G`}
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    itemsEl.querySelectorAll('.btn-buy').forEach(btn => {
+      const handler = (): void => {
+        const id = (btn as HTMLElement).dataset.id;
+        if (!id) return;
+        this.buyItem(id, root);
+      };
+      btn.addEventListener('click', handler);
+      this.cleanups.push(() => btn.removeEventListener('click', handler));
+    });
+  }
+
+  private isOwned(item: ItemDef): boolean {
+    const state = this.ctx.state.current;
+    if (item.category === 'accessory') return state.ownedItems.includes(item.id);
+    if (item.category === 'furniture') return state.ownedFurniture.includes(item.id);
+    return false;
+  }
+
+  private renderEffects(item: ItemDef): string {
+    const labels: Record<string, string> = {
+      hunger: '배고픔', happiness: '행복', cleanliness: '청결', energy: '기력', bond: '유대감',
+    };
+    return Object.entries(item.effects)
+      .map(([k, v]) => `<span class="effect ${v > 0 ? 'positive' : 'negative'}">+${v} ${labels[k] ?? k}</span>`)
+      .join('');
+  }
+
+  private buyItem(id: string, root: HTMLElement): void {
+    const item = ITEMS.find(i => i.id === id);
+    if (!item) return;
+
+    const state = this.ctx.state.current;
+
+    // 이미 소유한 액세서리/가구: 장착
+    if (this.isOwned(item)) {
+      if (item.category === 'accessory') {
+        state.equippedAccessory = state.equippedAccessory === id ? null : id;
+        showToast(state.equippedAccessory === id ? `${item.name} 장착!` : '액세서리 해제');
+      }
+      this.ctx.save.save(state);
+      this.ctx.sound.playClick();
+      this.renderItems(root);
+      return;
+    }
+
+    if (state.gold < item.price) {
+      showToast('골드가 부족해요!');
+      this.ctx.sound.playError();
+      return;
+    }
+
+    state.gold -= item.price;
+
+    if (item.category === 'food' || item.category === 'snack') {
+      // 소모품: 즉시 사용
+      state.petStats = applyEffects(state.petStats, item.effects);
+      showToast(`${item.name} 사용! ${item.emoji}`);
+      this.ctx.sound.playHarvest();
+    } else if (item.category === 'accessory') {
+      state.ownedItems.push(id);
+      state.equippedAccessory = id;
+      showToast(`${item.name} 획득 + 장착!`);
+      this.ctx.sound.playCoin();
+    } else if (item.category === 'furniture') {
+      state.ownedFurniture.push(id);
+      state.petStats = applyEffects(state.petStats, item.effects);
+      showToast(`${item.name} 설치!`);
+      this.ctx.sound.playCoin();
+    }
+
+    this.ctx.save.save(state);
+    this.updateGold(root);
+    this.renderItems(root);
+  }
+
+  private updateGold(root: HTMLElement): void {
+    const el = root.querySelector('#shop-gold');
+    if (el) el.textContent = String(this.ctx.state.current.gold);
+  }
+
+  unmount(): void {
+    this.cleanups.forEach(fn => fn());
+    this.cleanups = [];
+  }
+}

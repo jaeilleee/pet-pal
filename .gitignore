@@ -8,3 +8,4 @@ dist/
 outputs/
 android/
 ios/
+.vercel
