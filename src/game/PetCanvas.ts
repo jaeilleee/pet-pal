@@ -9,6 +9,8 @@ import { getGrowthStage, PETS } from '../data/pets';
 import { drawPet, createAnimState, updateAnimState, type PetAnimState } from './PetRenderer';
 import { ParticleSystem, type ParticleType } from './Particles';
 import { getTimeOfDay } from '../data/time-guard';
+import { getPersonalitySpeech, getSpeechFromCategory } from '../data/speeches';
+import type { Personality } from '../data/pets';
 
 /** 말풍선 콜백 */
 export type SpeechCallback = (text: string) => void;
@@ -27,12 +29,23 @@ interface CanvasPet {
   facingLeft: boolean;
   jealousy: number;
   name: string;
+  personality: Personality;
   speechText: string;
   speechAlpha: number;
   speechTimer: number;
   idleEmotionTimer: number;
   stats: PetStats | null;
   accessory: string | null;
+  /** 이동 도착 시 바운스 오프셋 */
+  bounceOffset: number;
+  /** 바운스 진행 중 여부 */
+  isBouncing: boolean;
+  /** 바운스 타이머 */
+  bounceTimer: number;
+  /** 상호작용 쿨다운 */
+  interactionCooldown: number;
+  /** 다른 펫을 따라가는 중인지 */
+  followingPetIndex: number;
 }
 
 export class PetCanvas {
@@ -46,8 +59,9 @@ export class PetCanvas {
   private furniture: string[] = [];
   private season: 'spring' | 'summer' | 'autumn' | 'winter' = 'spring';
   private ambientTimer = 0;
-  private moveSpeed = 60;
+  private moveSpeed = 80;
   private onSpeech: SpeechCallback | null = null;
+  private onPetSelected: ((index: number) => void) | null = null;
 
   private pets: CanvasPet[] = [];
   private activePetIndex = 0;
@@ -92,6 +106,7 @@ export class PetCanvas {
         existing.size = stageInfo.size;
         existing.jealousy = pd.jealousy;
         existing.name = pd.name;
+        existing.personality = pd.personality;
         existing.stats = pd.stats;
         return existing;
       }
@@ -120,12 +135,18 @@ export class PetCanvas {
       facingLeft: false,
       jealousy: pd.jealousy,
       name: pd.name,
+      personality: pd.personality,
       speechText: '',
       speechAlpha: 0,
       speechTimer: 0,
       idleEmotionTimer: 5 + Math.random() * 10,
       stats: pd.stats,
       accessory: pd.equippedAccessory,
+      bounceOffset: 0,
+      isBouncing: false,
+      bounceTimer: 0,
+      interactionCooldown: 0,
+      followingPetIndex: -1,
     };
   }
 
@@ -144,6 +165,12 @@ export class PetCanvas {
     // 펫 영역 판정: 가장 가까운 펫 찾기
     const closest = this.findClosestPet(clickX, clickY);
     if (closest) {
+      // 클릭한 펫이 활성 펫과 다르면 펫 전환
+      const clickedIndex = this.pets.indexOf(closest);
+      if (clickedIndex !== -1 && clickedIndex !== this.activePetIndex) {
+        this.activePetIndex = clickedIndex;
+        this.onPetSelected?.(clickedIndex);
+      }
       this.handlePetTouch(closest, clickX, clickY);
       return;
     }
@@ -255,6 +282,10 @@ export class PetCanvas {
     this.onSpeech = cb;
   }
 
+  setPetSelectedCallback(cb: (index: number) => void): void {
+    this.onPetSelected = cb;
+  }
+
   setFurniture(items: string[]): void {
     this.furniture = items;
   }
@@ -300,7 +331,14 @@ export class PetCanvas {
       this.updatePetMovement(pet, dt);
       this.updatePetIdleEmotion(pet, dt);
       this.updatePetSpeech(pet, dt);
+      // 상호작용 쿨다운 감소
+      if (pet.interactionCooldown > 0) {
+        pet.interactionCooldown -= dt;
+      }
     }
+
+    // 펫 간 상호작용 체크
+    this.updatePetInteractions(dt);
 
     this.particles.update(dt);
 
@@ -315,6 +353,18 @@ export class PetCanvas {
   };
 
   private updatePetMovement(pet: CanvasPet, dt: number): void {
+    // 바운스 애니메이션 처리
+    if (pet.isBouncing) {
+      pet.bounceTimer -= dt;
+      if (pet.bounceTimer <= 0) {
+        pet.isBouncing = false;
+        pet.bounceOffset = 0;
+      } else {
+        // 감쇄 바운스: 2px 오버슈트 → 복귀
+        pet.bounceOffset = Math.sin(pet.bounceTimer * 12) * 2 * (pet.bounceTimer / 0.3);
+      }
+    }
+
     if (!pet.isMoving) return;
     const dx = pet.targetX - pet.x;
     const dy = pet.targetY - pet.y;
@@ -324,10 +374,16 @@ export class PetCanvas {
       pet.x = pet.targetX;
       pet.y = pet.targetY;
       pet.isMoving = false;
+      // 도착 시 바운스 시작
+      pet.isBouncing = true;
+      pet.bounceTimer = 0.3;
       return;
     }
 
-    const step = this.moveSpeed * dt;
+    // Ease-out: 목표에 가까울수록 느려짐
+    const easeFactor = Math.min(1, dist / 60);
+    const speed = this.moveSpeed * (0.3 + 0.7 * easeFactor);
+    const step = speed * dt;
     pet.x += (dx / dist) * step;
     pet.y += (dy / dist) * step;
     pet.facingLeft = dx < 0;
@@ -343,20 +399,75 @@ export class PetCanvas {
 
     const s = pet.stats;
     if (s.hunger < 25) {
-      this.showPetSpeech(pet, '배고파...');
+      this.showPetSpeech(pet, getPersonalitySpeech(pet.personality, s));
       this.setPetEmotion(pet, 'eating');
     } else if (s.happiness < 25) {
-      this.showPetSpeech(pet, '심심해...');
+      this.showPetSpeech(pet, getSpeechFromCategory(pet.personality, 'bored'));
     } else if (s.cleanliness < 25) {
-      this.showPetSpeech(pet, '더러워...');
+      this.showPetSpeech(pet, getPersonalitySpeech(pet.personality, s));
     } else if (s.energy < 20) {
-      this.showPetSpeech(pet, '졸려...');
+      this.showPetSpeech(pet, getSpeechFromCategory(pet.personality, 'tired'));
       this.setPetEmotion(pet, 'sleeping');
     } else if (s.happiness > 80 && Math.random() < 0.5) {
-      this.showPetSpeech(pet, ['기분 좋아!', '놀자!', '사랑해!'][Math.floor(Math.random() * 3)]);
+      this.showPetSpeech(pet, getSpeechFromCategory(pet.personality, 'happy'));
       this.setPetEmotion(pet, 'happy');
+      // 펫 타입별 고유 행동
+      this.triggerPetTypeBehavior(pet);
     } else if (Math.random() < 0.3) {
-      this.startRandomWalk(pet);
+      // 펫 타입별 idle 행동 (중립 상태에서도 가끔)
+      if (Math.random() < 0.4) {
+        this.triggerPetTypeBehavior(pet);
+      } else {
+        this.startRandomWalk(pet);
+      }
+    }
+  }
+
+  /** 펫 타입별 고유 idle 행동 트리거 */
+  private triggerPetTypeBehavior(pet: CanvasPet): void {
+    switch (pet.type) {
+      case 'dog':
+        if (pet.stats && pet.stats.happiness > 70) {
+          // 꼬리 흔들기 진폭 2배는 renderSinglePet에서 처리
+          if (Math.random() < 0.3) {
+            // 가끔 점프
+            pet.anim.customAction = 'jumping';
+            pet.anim.customActionTimer = 1.5;
+          }
+        }
+        break;
+      case 'cat':
+        if (Math.random() < 0.3) {
+          // 그루밍 모션
+          pet.anim.customAction = 'grooming';
+          pet.anim.customActionTimer = 3;
+        } else if (Math.random() < 0.3) {
+          // 기지개
+          pet.anim.customAction = 'stretch';
+          pet.anim.customActionTimer = 2;
+        }
+        break;
+      case 'bird':
+        // 날개짓 빈도는 happiness에 비례 (drawFeatures에서 wingFlap 사용)
+        // 여기서는 추가 파티클로 표현
+        if (pet.stats && pet.stats.happiness > 60) {
+          this.particles.emit(pet.x, pet.y - 10, 'sparkle', 2);
+        }
+        break;
+      case 'pig':
+        if (pet.stats && pet.stats.hunger < 50) {
+          // 코로 바닥 킁킁
+          pet.anim.customAction = 'sniffing';
+          pet.anim.customActionTimer = 2.5;
+        }
+        break;
+      case 'reptile':
+        // 일광욕 자세: 가만히 + 가끔 혀 날름
+        if (Math.random() < 0.4) {
+          pet.anim.customAction = 'tongue';
+          pet.anim.customActionTimer = 2;
+        }
+        break;
     }
   }
 
@@ -399,14 +510,28 @@ export class PetCanvas {
   private renderSinglePet(
     c: CanvasRenderingContext2D, pet: CanvasPet, isActive: boolean,
   ): void {
+    // 강아지 happiness > 70이면 꼬리 흔들기 진폭 2배
+    const origTailAngle = pet.anim.tailAngle;
+    if (pet.type === 'dog' && pet.stats && pet.stats.happiness > 70) {
+      pet.anim.tailAngle *= 2;
+    }
+
+    // 새: 날개짓 빈도를 happiness에 비례시키려면 time 스케일 조정
+    // (drawFeatures 내에서 anim.time * 4로 계산하므로 간접 처리)
+
+    const renderY = pet.y + pet.bounceOffset;
+
     c.save();
     if (pet.facingLeft) {
       c.translate(pet.x, 0);
       c.scale(-1, 1);
       c.translate(-pet.x, 0);
     }
-    drawPet(c, pet.type, pet.stage, pet.anim, pet.x, pet.y, pet.size);
+    drawPet(c, pet.type, pet.stage, pet.anim, pet.x, renderY, pet.size, pet.stats);
     c.restore();
+
+    // 꼬리 각도 복원
+    pet.anim.tailAngle = origTailAngle;
 
     // Accessory
     if (pet.accessory) {
@@ -583,6 +708,64 @@ export class PetCanvas {
       case 'autumn': this.particles.emitAmbient(this.W, this.H, 'leaf'); break;
       case 'winter': this.particles.emitAmbient(this.W, this.H, 'snowflake'); break;
     }
+  }
+
+  /** 펫 간 상호작용: 2마리 이상, 거리 < 60px, jealousy < 20 */
+  private updatePetInteractions(_dt: number): void {
+    if (this.pets.length < 2) return;
+
+    for (let i = 0; i < this.pets.length; i++) {
+      for (let j = i + 1; j < this.pets.length; j++) {
+        const a = this.pets[i];
+        const b = this.pets[j];
+
+        // 쿨다운 중이면 스킵
+        if (a.interactionCooldown > 0 || b.interactionCooldown > 0) continue;
+
+        // 질투가 높으면 상호작용 안 함
+        if (a.jealousy >= 20 || b.jealousy >= 20) continue;
+
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 60) {
+          this.triggerPetInteraction(a, b, i, j);
+        }
+      }
+    }
+  }
+
+  private triggerPetInteraction(a: CanvasPet, b: CanvasPet, _ai: number, _bi: number): void {
+    const roll = Math.random();
+    if (roll < 0.5) {
+      // 코 맞대기: 서로를 향해 facingLeft 설정
+      a.facingLeft = a.x > b.x;
+      b.facingLeft = b.x > a.x;
+      this.setPetEmotion(a, 'happy');
+      this.setPetEmotion(b, 'happy');
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      this.particles.emit(midX, midY - 10, 'heart', 4);
+    } else {
+      // 같이 걷기: 한 펫이 다른 펫을 따라감
+      const follower = Math.random() < 0.5 ? a : b;
+      const leader = follower === a ? b : a;
+      follower.targetX = leader.x + (Math.random() - 0.5) * 30;
+      follower.targetY = leader.y + (Math.random() - 0.5) * 15;
+      follower.isMoving = true;
+      follower.facingLeft = follower.targetX < follower.x;
+      this.setPetEmotion(follower, 'happy');
+      this.setPetEmotion(leader, 'happy');
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      this.particles.emit(midX, midY - 10, 'heart', 3);
+    }
+
+    // 쿨다운 설정 (15~25초)
+    const cooldown = 15 + Math.random() * 10;
+    a.interactionCooldown = cooldown;
+    b.interactionCooldown = cooldown;
   }
 
   private getCurrentSeason(): 'spring' | 'summer' | 'autumn' | 'winter' {

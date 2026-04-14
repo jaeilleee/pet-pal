@@ -7,6 +7,7 @@
  */
 
 import type { PetType, GrowthStage } from '../data/pets';
+import type { PetStats } from '../data/state';
 
 /** 펫 색상 팔레트 */
 const PET_COLORS: Record<PetType, { body: string; bodyLight: string; accent: string; eyeColor: string }> = {
@@ -33,6 +34,10 @@ export interface PetAnimState {
   breathScale: number;
   bounceY: number;
   emotion: 'neutral' | 'happy' | 'eating' | 'sleeping' | 'love';
+  /** 펫 타입별 고유 행동 (예: 'wagging', 'grooming', 'flapping', 'sniffing', 'sunbathing') */
+  customAction: string | null;
+  /** customAction 남은 시간(초) */
+  customActionTimer: number;
 }
 
 export function createAnimState(): PetAnimState {
@@ -44,6 +49,8 @@ export function createAnimState(): PetAnimState {
     breathScale: 1,
     bounceY: 0,
     emotion: 'neutral',
+    customAction: null,
+    customActionTimer: 0,
   };
 }
 
@@ -62,6 +69,15 @@ export function updateAnimState(state: PetAnimState, dt: number): void {
   state.tailAngle = Math.sin(state.time * 3) * 0.3;
   state.breathScale = 1 + Math.sin(state.time * 1.5) * 0.02;
   state.bounceY = Math.sin(state.time * 2) * 2;
+
+  // customAction 타이머 감소
+  if (state.customActionTimer > 0) {
+    state.customActionTimer -= dt;
+    if (state.customActionTimer <= 0) {
+      state.customAction = null;
+      state.customActionTimer = 0;
+    }
+  }
 }
 
 export function drawPet(
@@ -72,17 +88,38 @@ export function drawPet(
   cx: number,
   cy: number,
   size: number,
+  stats?: PetStats | null,
 ): void {
   const colors = PET_COLORS[petType];
   const ratios = STAGE_RATIOS[stage];
   const s = size * ratios.bodyScale;
   const headR = s * ratios.headRatio;
-  const bodyR = s * 0.35;
+  let bodyR = s * 0.35;
   const eyeR = s * ratios.eyeSize;
+
+  // 스탯 연동 외형: 배고프면 야윈 모습
+  if (stats && stats.hunger < 30) {
+    bodyR *= 0.92;
+  }
+
+  // 행복 > 80: glow 효과
+  const showGlow = stats != null && stats.happiness > 80;
 
   ctx.save();
   ctx.translate(cx, cy + anim.bounceY);
   ctx.scale(anim.breathScale, anim.breathScale);
+
+  // Happiness glow
+  if (showGlow) {
+    ctx.save();
+    ctx.shadowColor = '#FFD70060';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = 'rgba(255,215,0,0.08)';
+    ctx.beginPath();
+    ctx.arc(0, 0, bodyR * 1.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.08)';
@@ -93,14 +130,116 @@ export function drawPet(
   // Body
   drawBody(ctx, petType, stage, colors, bodyR, headR, anim);
 
+  // 더러우면 갈색 점 오버레이
+  if (stats && stats.cleanliness < 30) {
+    drawDirtSpots(ctx, bodyR);
+  }
+
   // Head
   const headY = -bodyR * 0.5 - headR * 0.5;
-  drawHead(ctx, petType, stage, colors, headR, headY, eyeR, anim);
+  drawHead(ctx, petType, stage, colors, headR, headY, eyeR, anim, stats);
 
-  // Accessories by pet type
+  // Accessories by pet type + customAction
   drawFeatures(ctx, petType, stage, colors, headR, bodyR, headY, anim);
 
+  // customAction 추가 렌더링
+  if (anim.customAction) {
+    drawCustomAction(ctx, petType, anim, headR, bodyR, headY);
+  }
+
   ctx.restore();
+}
+
+/** 더러울 때 몸에 갈색 점 오버레이 */
+function drawDirtSpots(ctx: CanvasRenderingContext2D, bodyR: number): void {
+  ctx.fillStyle = 'rgba(139,90,43,0.25)';
+  const spots = [
+    { x: -bodyR * 0.3, y: -bodyR * 0.1 },
+    { x: bodyR * 0.2, y: bodyR * 0.15 },
+    { x: bodyR * 0.05, y: -bodyR * 0.3 },
+  ];
+  for (const spot of spots) {
+    ctx.beginPath();
+    ctx.arc(spot.x, spot.y, bodyR * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** customAction별 추가 렌더링 */
+function drawCustomAction(
+  ctx: CanvasRenderingContext2D,
+  petType: PetType,
+  anim: PetAnimState,
+  headR: number,
+  bodyR: number,
+  headY: number,
+): void {
+  switch (anim.customAction) {
+    case 'grooming': {
+      // 고양이 그루밍: 앞발이 얼굴로
+      ctx.fillStyle = '#B0B0B0';
+      ctx.beginPath();
+      ctx.ellipse(-headR * 0.3, headY + headR * 0.6, bodyR * 0.1, bodyR * 0.15, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'stretch': {
+      // 고양이 기지개: 앞쪽으로 몸 늘림 (원으로 표현)
+      ctx.fillStyle = 'rgba(176,176,176,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(-bodyR * 0.6, bodyR * 0.3, bodyR * 0.25, bodyR * 0.1, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'sniffing': {
+      // 돼지 킁킁: 코 근처에 작은 선들
+      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 3; i++) {
+        const angle = -0.3 + i * 0.3;
+        const sx = Math.cos(angle) * headR * 0.6;
+        const sy = headY + headR * 0.8 + Math.sin(anim.time * 6) * 2;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx + Math.cos(angle) * 6, sy + 3);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'tongue': {
+      // 파충류 혀 날름
+      const tongueLen = headR * 0.5 * Math.max(0, Math.sin(anim.time * 8));
+      if (tongueLen > 1) {
+        ctx.strokeStyle = '#FF6B8A';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, headY + headR * 0.5);
+        ctx.lineTo(0, headY + headR * 0.5 + tongueLen);
+        // 갈라진 혀
+        ctx.moveTo(0, headY + headR * 0.5 + tongueLen);
+        ctx.lineTo(-2, headY + headR * 0.5 + tongueLen + 3);
+        ctx.moveTo(0, headY + headR * 0.5 + tongueLen);
+        ctx.lineTo(2, headY + headR * 0.5 + tongueLen + 3);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'jumping': {
+      // 강아지 점프: 바운스 효과는 PetCanvas에서 처리
+      // 여기서는 착지 먼지 효과
+      ctx.fillStyle = 'rgba(200,180,150,0.3)';
+      for (let i = 0; i < 3; i++) {
+        const px = (i - 1) * bodyR * 0.5;
+        ctx.beginPath();
+        ctx.arc(px, bodyR * 0.8, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 function drawBody(
@@ -186,6 +325,7 @@ function drawHead(
   headY: number,
   eyeR: number,
   anim: PetAnimState,
+  stats?: PetStats | null,
 ): void {
   // Head circle
   const headGrad = ctx.createRadialGradient(0, headY, 0, 0, headY, headR);
@@ -196,11 +336,12 @@ function drawHead(
   ctx.arc(0, headY, headR, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eyes
+  // Eyes -- energy < 20 이면 눈 높이 50% 축소 (반쯤 감김)
   const eyeSpacing = headR * 0.35;
   const eyeY = headY - headR * 0.05;
-  drawEye(ctx, -eyeSpacing, eyeY, eyeR, colors.eyeColor, anim);
-  drawEye(ctx, eyeSpacing, eyeY, eyeR, colors.eyeColor, anim);
+  const tiredEyes = stats != null && stats.energy < 20;
+  drawEye(ctx, -eyeSpacing, eyeY, eyeR, colors.eyeColor, anim, tiredEyes);
+  drawEye(ctx, eyeSpacing, eyeY, eyeR, colors.eyeColor, anim, tiredEyes);
 
   // Blush cheeks
   ctx.fillStyle = 'rgba(255,150,150,0.35)';
@@ -262,6 +403,7 @@ function drawEye(
   r: number,
   color: string,
   anim: PetAnimState,
+  tired = false,
 ): void {
   if (anim.emotion === 'sleeping') {
     // Closed eyes (line)
@@ -301,11 +443,22 @@ function drawEye(
     return;
   }
 
+  // Tired eyes: 눈 높이 50% 축소 (반쯤 감긴 눈)
+  const eyeHeightMult = tired ? 0.5 : 1.1;
+
   // Normal eye — white, iris, pupil, sparkle
   ctx.fillStyle = '#FFFFFF';
   ctx.beginPath();
-  ctx.ellipse(x, y, r, r * 1.1, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y, r, r * eyeHeightMult, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  // 피로 시 눈꺼풀 (위쪽 덮개)
+  if (tired) {
+    ctx.fillStyle = colors_backup(color);
+    ctx.beginPath();
+    ctx.ellipse(x, y - r * 0.25, r * 1.05, r * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.fillStyle = color;
   ctx.beginPath();

@@ -18,6 +18,7 @@ import { COLORS } from '../data/design-tokens';
 import { showToast } from '../ui/Toast';
 import { PetCanvas } from '../game/PetCanvas';
 import { checkNewAchievements, claimAchievements } from '../data/achievements';
+import { getPersonalitySpeech, getSpeechFromCategory } from '../data/speeches';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
 
@@ -26,8 +27,12 @@ const COOLDOWNS: Record<string, number> = {
   feed: 30_000, play: 45_000, walk: 60_000, clean: 40_000, talk: 15_000,
 };
 
-/** 대화 응답 (스탯 연동) */
-function getPetSpeech(stats: PetStats): string {
+/** 대화 응답 (성격+스탯 연동) */
+function getPetSpeech(stats: PetStats, personality?: import('../data/pets').Personality): string {
+  if (personality) {
+    return getPersonalitySpeech(personality, stats);
+  }
+  // 성격 없을 때 폴백
   if (stats.hunger < 30) return '배고파... 밥 줘!';
   if (stats.happiness < 30) return '심심해... 놀아줘!';
   if (stats.cleanliness < 30) return '씻고 싶어...';
@@ -122,14 +127,59 @@ export class HomeScene implements Scene {
       this.petCanvas.setAccessory(getItemById(activePet.equippedAccessory)?.emoji ?? null);
     }
     this.petCanvas.setStats(activePet.stats);
+
+    // 펫 클릭 시 활성 펫 전환 콜백
+    this.petCanvas.setPetSelectedCallback((idx: number) => {
+      this.ctx.sound.playClick();
+      this.ctx.state.current = { ...this.ctx.state.current, activePetIndex: idx };
+      this.ctx.save.save(this.ctx.state.current);
+      this.petCanvas?.setActivePet(idx);
+      this.petCanvas?.setPets(this.ctx.state.current.pets);
+      this.refreshUI(root);
+    });
+
     this.petCanvas.start();
     this.cleanups.push(() => this.petCanvas?.stop());
+
+    // 복귀 인사 시스템
+    this.showReturnGreeting(state, activePet);
 
     this.bindActions(root);
     this.bindPetTabsDelegation(root);
     this.bindDailyDelegation(root);
     this.updateJealousyAlert(root);
     this.startAutoSave();
+  }
+
+  /** 복귀 인사 시스템: 부재 시간에 따라 다른 반응 */
+  private showReturnGreeting(state: PetPalState, pet: PetData): void {
+    const elapsedMs = Date.now() - state.lastDecayAt;
+    const elapsedHours = elapsedMs / (1000 * 60 * 60);
+
+    if (elapsedHours < 2) return; // 2시간 미만이면 인사 없음
+
+    // 약간의 딜레이 후 인사 (Canvas 초기화 이후)
+    setTimeout(() => {
+      if (!this.petCanvas) return;
+
+      if (elapsedHours >= 24) {
+        this.petCanvas.showSpeech(getSpeechFromCategory(pet.personality, 'greeting'));
+        showToast(`${pet.name}: 많이 기다렸어...`);
+        // 눈물 효과 (love emotion + 파티클 많이)
+        this.petCanvas.setEmotion('love');
+        this.petCanvas.emitParticles('heart', 20);
+      } else if (elapsedHours >= 6) {
+        this.petCanvas.showSpeech(getSpeechFromCategory(pet.personality, 'greeting'));
+        showToast(`${pet.name}: 보고 싶었어...`);
+        this.petCanvas.setEmotion('love');
+        this.petCanvas.emitParticles('heart', 12);
+      } else {
+        // 2시간+
+        this.petCanvas.showSpeech(getSpeechFromCategory(pet.personality, 'greeting'));
+        this.petCanvas.setEmotion('love');
+        this.petCanvas.emitParticles('heart', 5);
+      }
+    }, 500);
   }
 
   private processLoginRewards(): void {
@@ -289,9 +339,10 @@ export class HomeScene implements Scene {
         this.ctx.state.current = applyEffectsToPet(state, idx, { happiness: 15, bond: 2 }, 'talk');
         this.ctx.state.current.totalTalks++;
         this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'talk');
+        const currentPet = getActivePet(this.ctx.state.current);
         const activeStats = getActiveStats(this.ctx.state.current);
         this.petCanvas?.setEmotion('love');
-        this.petCanvas?.showSpeech(getPetSpeech(activeStats));
+        this.petCanvas?.showSpeech(getPetSpeech(activeStats, currentPet?.personality));
         this.petCanvas?.emitParticles('heart', 6);
         this.petCanvas?.triggerJealousy();
         this.ctx.sound.playClick();
