@@ -261,6 +261,17 @@
   overflow-y: auto;
 }
 
+/* ===== Ad Banner Slot ===== */
+.ad-banner-slot {
+  width: 100%;
+  min-height: 50px;
+  background: rgba(0,0,0,0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .home-header {
   display: flex;
   align-items: center;

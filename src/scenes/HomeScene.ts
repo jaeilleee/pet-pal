@@ -40,6 +40,7 @@ export class HomeScene implements Scene {
   private ctx: Ctx;
   private cleanups: Array<() => void> = [];
   private petCanvas: PetCanvas | null = null;
+  /** 펫별 쿨다운: key = "petId:action" */
   private lastActionTime: Record<string, number> = {};
 
   constructor(ctx: Ctx) {
@@ -71,6 +72,7 @@ export class HomeScene implements Scene {
 
     root.innerHTML = `
       <div class="scene home-scene" style="background:${getTimeBackground()}">
+        <div class="ad-banner-slot" id="ad-banner-top"></div>
         <div class="home-header">
           <div class="home-gold"><span class="gold-icon">💰</span><span id="gold-amount">${state.gold}</span>G</div>
           <div class="pet-tabs" id="pet-tabs">${this.renderPetTabs(state)}</div>
@@ -316,16 +318,19 @@ export class HomeScene implements Scene {
     this.refreshUI(root);
   }
 
+  /** 펫별 쿨다운 체크 — 같은 펫에 같은 액션만 쿨다운 */
   private checkCooldown(action: string): boolean {
     const cooldown = COOLDOWNS[action];
     if (!cooldown) return false;
-    const last = this.lastActionTime[action] ?? 0;
+    const petId = this.ctx.state.current.activePetIndex;
+    const key = `${petId}:${action}`;
+    const last = this.lastActionTime[key] ?? 0;
     const remaining = cooldown - (Date.now() - last);
     if (remaining > 0) {
       showToast(`${Math.ceil(remaining / 1000)}초 후에 다시 할 수 있어요`);
       return true;
     }
-    this.lastActionTime[action] = Date.now();
+    this.lastActionTime[key] = Date.now();
     return false;
   }
 
