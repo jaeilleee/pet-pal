@@ -78,7 +78,9 @@ export class WalkGameScene implements Scene {
     this.canvas.height = this.H * 2;
     this.canvas.style.width = `${this.W}px`;
     this.canvas.style.height = `${this.H}px`;
-    this.gc = this.canvas.getContext('2d')!;
+    const ctx2d = this.canvas.getContext('2d');
+    if (!ctx2d) throw new Error('[WalkGameScene] Failed to get 2d context');
+    this.gc = ctx2d;
     this.gc.scale(2, 2);
 
     this.startGame();
@@ -108,12 +110,22 @@ export class WalkGameScene implements Scene {
 
     // Buttons
     const backBtn = root.querySelector('#btn-back') as HTMLElement;
-    backBtn.addEventListener('click', () => this.goHome());
-    root.querySelector('#btn-walk-retry')?.addEventListener('click', () => {
+    const backHandler = (): void => this.goHome();
+    backBtn.addEventListener('click', backHandler);
+    this.cleanups.push(() => backBtn.removeEventListener('click', backHandler));
+
+    const retryBtn = root.querySelector('#btn-walk-retry') as HTMLElement;
+    const retryHandler = (): void => {
       (root.querySelector('#walk-overlay') as HTMLElement).style.display = 'none';
       this.startGame();
-    });
-    root.querySelector('#btn-walk-home')?.addEventListener('click', () => this.goHome());
+    };
+    retryBtn.addEventListener('click', retryHandler);
+    this.cleanups.push(() => retryBtn.removeEventListener('click', retryHandler));
+
+    const homeBtn = root.querySelector('#btn-walk-home') as HTMLElement;
+    const homeHandler = (): void => this.goHome();
+    homeBtn.addEventListener('click', homeHandler);
+    this.cleanups.push(() => homeBtn.removeEventListener('click', homeHandler));
   }
 
   private startGame(): void {
@@ -284,7 +296,7 @@ export class WalkGameScene implements Scene {
     this.ctx.sound.playClick();
     import('./HomeScene').then(m => {
       this.ctx.scenes.switchTo(() => new m.HomeScene(this.ctx));
-    });
+    }).catch(err => console.error('[WalkGameScene] HomeScene load failed', err));
   }
 
   unmount(): void {

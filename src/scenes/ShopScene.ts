@@ -168,9 +168,12 @@ export class ShopScene implements Scene {
       return;
     }
 
-    state.gold -= cost;
-    state.unlockedSlots = slotIndex + 1;
-    this.ctx.save.save(state);
+    this.ctx.state.current = {
+      ...state,
+      gold: state.gold - cost,
+      unlockedSlots: slotIndex + 1,
+    };
+    this.ctx.save.save(this.ctx.state.current);
     this.ctx.sound.playCoin();
     showToast(`펫 슬롯 ${slotIndex + 1} 해금!`);
     this.updateGold(root);
@@ -216,10 +219,12 @@ export class ShopScene implements Scene {
     if (this.isOwned(item)) {
       if (item.category === 'accessory' && activePet) {
         const isEquipped = activePet.equippedAccessory === id;
-        activePet.equippedAccessory = isEquipped ? null : id;
+        const pets = [...state.pets];
+        pets[state.activePetIndex] = { ...activePet, equippedAccessory: isEquipped ? null : id };
+        this.ctx.state.current = { ...state, pets };
         showToast(!isEquipped ? `${item.name} 장착!` : '액세서리 해제');
       }
-      this.ctx.save.save(state);
+      this.ctx.save.save(this.ctx.state.current);
       this.ctx.sound.playClick();
       this.renderItems(root);
       return;
@@ -231,25 +236,29 @@ export class ShopScene implements Scene {
       return;
     }
 
-    state.gold -= item.price;
     const idx = state.activePetIndex;
+    let updated: PetPalState = { ...state, gold: state.gold - item.price };
 
     if (item.category === 'food' || item.category === 'snack') {
-      this.ctx.state.current = applyEffectsToPet(state, idx, item.effects);
+      updated = applyEffectsToPet(updated, idx, item.effects);
+      updated = { ...updated, totalFeeds: updated.totalFeeds + 1 };
       showToast(`${item.name} 사용! ${item.emoji}`);
       this.ctx.sound.playHarvest();
     } else if (item.category === 'accessory') {
-      state.ownedItems.push(id);
-      if (activePet) activePet.equippedAccessory = id;
+      const pets = [...updated.pets];
+      const pet = { ...pets[idx], equippedAccessory: id };
+      pets[idx] = pet;
+      updated = { ...updated, ownedItems: [...updated.ownedItems, id], pets };
       showToast(`${item.name} 획득 + 장착!`);
       this.ctx.sound.playCoin();
     } else if (item.category === 'furniture') {
-      state.ownedFurniture.push(id);
-      this.ctx.state.current = applyEffectsToPet(state, idx, item.effects);
+      updated = { ...updated, ownedFurniture: [...updated.ownedFurniture, id] };
+      updated = applyEffectsToPet(updated, idx, item.effects);
       showToast(`${item.name} 설치!`);
       this.ctx.sound.playCoin();
     }
 
+    this.ctx.state.current = updated;
     this.ctx.save.save(this.ctx.state.current);
     this.updateGold(root);
     this.renderItems(root);

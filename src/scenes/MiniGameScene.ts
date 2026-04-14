@@ -232,7 +232,7 @@ export class MiniGameScene implements Scene {
     const isHighScore = this.score > state.miniGameHighScore;
     if (isHighScore) state.miniGameHighScore = this.score;
 
-    const goldReward = Math.floor(this.score / 5);
+    const goldReward = Math.floor(this.score / 3);
     state.gold += goldReward;
     state.totalGoldEarned += goldReward;
     state = applyEffectsToPet(state, state.activePetIndex, { happiness: 10, bond: 2 });
@@ -258,7 +258,7 @@ export class MiniGameScene implements Scene {
     this.ctx.sound.playClick();
     import('./HomeScene').then(m => {
       this.ctx.scenes.switchTo(() => new m.HomeScene(this.ctx));
-    });
+    }).catch(err => console.error('[MiniGameScene] HomeScene load failed', err));
   }
 
   unmount(): void {

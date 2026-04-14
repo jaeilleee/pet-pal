@@ -38,7 +38,7 @@ export class TitleScene implements Scene {
             <button class="btn-primary title-start-btn" id="btn-start">
               시작하기
             </button>
-            <p class="title-version">v1.0.0</p>
+            <p class="title-version">v2.1.0</p>
           </div>
         </div>
       </div>

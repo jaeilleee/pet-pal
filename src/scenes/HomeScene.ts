@@ -124,7 +124,8 @@ export class HomeScene implements Scene {
     this.cleanups.push(() => this.petCanvas?.stop());
 
     this.bindActions(root);
-    this.bindPetTabs(root);
+    this.bindPetTabsDelegation(root);
+    this.bindDailyDelegation(root);
     this.updateJealousyAlert(root);
     this.startAutoSave();
   }
@@ -212,42 +213,6 @@ export class HomeScene implements Scene {
     return 100;
   }
 
-  private bindPetTabs(root: HTMLElement): void {
-    root.querySelectorAll('.pet-tab[data-pet-index]').forEach(btn => {
-      const handler = (): void => {
-        const idx = parseInt((btn as HTMLElement).dataset.petIndex ?? '0', 10);
-        this.ctx.sound.playClick();
-        this.ctx.state.current.activePetIndex = idx;
-        this.ctx.save.save(this.ctx.state.current);
-        // 전체 UI 새로고침
-        this.ctx.scenes.switchTo(() => new HomeScene(this.ctx));
-      };
-      btn.addEventListener('click', handler);
-      this.cleanups.push(() => btn.removeEventListener('click', handler));
-    });
-
-    const addBtn = root.querySelector('#btn-add-pet');
-    if (addBtn) {
-      const handler = (): void => {
-        this.ctx.sound.playClick();
-        const state = this.ctx.state.current;
-        if (state.pets.length >= state.unlockedSlots) {
-          // 슬롯 미해금 → 상점 안내
-          showToast('상점에서 펫 슬롯을 해금하세요! 🛍️');
-          import('./ShopScene').then(m => {
-            this.ctx.scenes.switchTo(() => new m.ShopScene(this.ctx));
-          }).catch(err => console.error('[HomeScene] Shop load failed', err));
-        } else {
-          import('./PetSelectScene').then(m => {
-            this.ctx.scenes.switchTo(() => new m.PetSelectScene(this.ctx, 'add'));
-          }).catch(err => console.error('[HomeScene] PetSelect load failed', err));
-        }
-      };
-      addBtn.addEventListener('click', handler);
-      this.cleanups.push(() => addBtn.removeEventListener('click', handler));
-    }
-  }
-
   private bindActions(root: HTMLElement): void {
     root.querySelectorAll('.action-btn').forEach(btn => {
       const handler = (): void => {
@@ -257,8 +222,6 @@ export class HomeScene implements Scene {
       btn.addEventListener('click', handler);
       this.cleanups.push(() => btn.removeEventListener('click', handler));
     });
-
-    this.bindDailyClaim(root);
 
     const achBtn = root.querySelector('#btn-achievements');
     if (achBtn) {
@@ -273,30 +236,12 @@ export class HomeScene implements Scene {
     }
   }
 
-  private bindDailyClaim(root: HTMLElement): void {
-    const claimBtn = root.querySelector('#btn-claim-daily');
-    if (claimBtn) {
-      const handler = (): void => {
-        const reward = getDailyRewardTotal(this.ctx.state.current);
-        this.ctx.state.current.gold += reward;
-        this.ctx.state.current.totalGoldEarned += reward;
-        this.ctx.state.current.dailyTasksClaimed = true;
-        this.ctx.save.save(this.ctx.state.current);
-        this.ctx.sound.playCoin();
-        showToast(`데일리 완료! +${reward}G`);
-        this.petCanvas?.emitParticles('star', 8);
-        this.refreshUI(root);
-      };
-      claimBtn.addEventListener('click', handler);
-      this.cleanups.push(() => claimBtn.removeEventListener('click', handler));
-    }
-  }
-
   private handleAction(action: string, root: HTMLElement): void {
     if (this.checkCooldown(action)) return;
 
     const state = this.ctx.state.current;
     const idx = state.activePetIndex;
+    const prevBond = getActivePet(state)?.stats.bond ?? 0;
 
     switch (action) {
       case 'feed':
@@ -365,7 +310,7 @@ export class HomeScene implements Scene {
         return;
     }
 
-    this.checkEvolution();
+    this.checkEvolution(prevBond);
     this.checkAchievements();
     this.ctx.save.save(this.ctx.state.current);
     this.refreshUI(root);
@@ -410,12 +355,11 @@ export class HomeScene implements Scene {
     overlay.querySelector('.mg-close')?.addEventListener('click', () => overlay.remove());
   }
 
-  private checkEvolution(): void {
-    const state = this.ctx.state.current;
-    const pet = getActivePet(state);
+  private checkEvolution(prevBond: number): void {
+    const pet = getActivePet(this.ctx.state.current);
     if (!pet) return;
 
-    const prevStage = getGrowthStage(pet.type, pet.stats.bond - 3);
+    const prevStage = getGrowthStage(pet.type, prevBond);
     const newStage = getGrowthStage(pet.type, pet.stats.bond);
     if (prevStage !== newStage) {
       const petDef = PETS[pet.type];
@@ -453,10 +397,74 @@ export class HomeScene implements Scene {
     }
   }
 
+  /** 이벤트 위임: #pet-tabs 컨테이너에 단일 click (mount에서 1회) */
+  private bindPetTabsDelegation(root: HTMLElement): void {
+    const tabsContainer = root.querySelector('#pet-tabs');
+    if (!tabsContainer) return;
+    const handler = (e: Event): void => {
+      const target = (e.target as HTMLElement).closest('[data-pet-index]') as HTMLElement | null;
+      if (target) {
+        const idx = parseInt(target.dataset.petIndex ?? '0', 10);
+        this.ctx.sound.playClick();
+        this.ctx.state.current = { ...this.ctx.state.current, activePetIndex: idx };
+        this.ctx.save.save(this.ctx.state.current);
+        this.petCanvas?.setActivePet(idx);
+        this.petCanvas?.setPets(this.ctx.state.current.pets);
+        this.refreshUI(root);
+        return;
+      }
+      // + 버튼
+      const addBtn = (e.target as HTMLElement).closest('#btn-add-pet');
+      if (addBtn) {
+        this.ctx.sound.playClick();
+        const state = this.ctx.state.current;
+        if (state.pets.length >= state.unlockedSlots) {
+          showToast('상점에서 펫 슬롯을 해금하세요! 🛍️');
+          import('./ShopScene').then(m => {
+            this.ctx.scenes.switchTo(() => new m.ShopScene(this.ctx));
+          }).catch(err => console.error('[HomeScene] Shop load failed', err));
+        } else {
+          import('./PetSelectScene').then(m => {
+            this.ctx.scenes.switchTo(() => new m.PetSelectScene(this.ctx, 'add'));
+          }).catch(err => console.error('[HomeScene] PetSelect load failed', err));
+        }
+      }
+    };
+    tabsContainer.addEventListener('click', handler);
+    this.cleanups.push(() => tabsContainer.removeEventListener('click', handler));
+  }
+
+  /** 이벤트 위임: #daily-strip 컨테이너에 단일 click (mount에서 1회) */
+  private bindDailyDelegation(root: HTMLElement): void {
+    const strip = root.querySelector('#daily-strip');
+    if (!strip) return;
+    const handler = (e: Event): void => {
+      const claimBtn = (e.target as HTMLElement).closest('#btn-claim-daily');
+      if (!claimBtn) return;
+      const reward = getDailyRewardTotal(this.ctx.state.current);
+      this.ctx.state.current = {
+        ...this.ctx.state.current,
+        gold: this.ctx.state.current.gold + reward,
+        totalGoldEarned: this.ctx.state.current.totalGoldEarned + reward,
+        dailyTasksClaimed: true,
+      };
+      this.ctx.save.save(this.ctx.state.current);
+      this.ctx.sound.playCoin();
+      showToast(`데일리 완료! +${reward}G`);
+      this.petCanvas?.emitParticles('star', 8);
+      this.refreshUI(root);
+    };
+    strip.addEventListener('click', handler);
+    this.cleanups.push(() => strip.removeEventListener('click', handler));
+  }
+
   private refreshUI(root: HTMLElement): void {
     const state = this.ctx.state.current;
     const pet = getActivePet(state);
     if (!pet) return;
+
+    const stage = getGrowthStage(pet.type, pet.stats.bond);
+    const stageInfo = PETS[pet.type].stages[stage];
 
     const statBars = root.querySelector('#stat-bars');
     if (statBars) statBars.innerHTML = this.renderStatBars(pet.stats);
@@ -470,23 +478,21 @@ export class HomeScene implements Scene {
     const nameEl = root.querySelector('#pet-name-label');
     if (nameEl) nameEl.textContent = pet.name;
 
+    const stageEl = root.querySelector('#pet-stage-label');
+    if (stageEl) stageEl.textContent = stageInfo.name;
+
+    // Daily strip (innerHTML만 교체, 리스너는 위임으로 처리)
     const dailyStrip = root.querySelector('#daily-strip');
-    if (dailyStrip) {
-      dailyStrip.innerHTML = this.renderDailyStrip(state);
-      this.bindDailyClaim(root);
-    }
+    if (dailyStrip) dailyStrip.innerHTML = this.renderDailyStrip(state);
 
     const bondFill = root.querySelector('#bond-fill') as HTMLElement;
     const bondLabel = root.querySelector('#bond-label') as HTMLElement;
     if (bondFill) bondFill.style.width = `${this.getBondPercent(pet)}%`;
     if (bondLabel) bondLabel.textContent = `유대감 ${pet.stats.bond} / ${this.getNextThreshold(pet)}`;
 
-    // Pet tabs 업데이트
+    // Pet tabs (innerHTML만 교체, 리스너는 위임으로 처리)
     const tabsEl = root.querySelector('#pet-tabs');
-    if (tabsEl) {
-      tabsEl.innerHTML = this.renderPetTabs(state);
-      this.bindPetTabs(root);
-    }
+    if (tabsEl) tabsEl.innerHTML = this.renderPetTabs(state);
 
     // Canvas 동기화
     this.petCanvas?.setPets(state.pets);

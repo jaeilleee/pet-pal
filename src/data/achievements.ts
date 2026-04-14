@@ -4,7 +4,6 @@
 
 import type { PetPalState } from './state';
 import { getGrowthStage } from './pets';
-import { getActivePet, getActiveStats } from './state';
 
 export interface AchievementDef {
   id: string;
@@ -42,9 +41,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'talk-50', name: '베스트프렌드', description: '50번 대화했어요', emoji: '💕', reward: 150, check: s => s.totalTalks >= 50 },
 
   // === 성장 ===
-  { id: 'grow-child', name: '성장기', description: '꼬마로 성장했어요', emoji: '🌱', reward: 50, check: s => { const p = getActivePet(s); return p != null && ['child','teen','adult'].includes(getGrowthStage(p.type, p.stats.bond)); } },
-  { id: 'grow-teen', name: '청소년기', description: '청소년으로 성장했어요', emoji: '🌿', reward: 100, check: s => { const p = getActivePet(s); return p != null && ['teen','adult'].includes(getGrowthStage(p.type, p.stats.bond)); } },
-  { id: 'grow-adult', name: '완전체', description: '어른으로 성장했어요', emoji: '🌳', reward: 300, check: s => { const p = getActivePet(s); return p != null && getGrowthStage(p.type, p.stats.bond) === 'adult'; } },
+  { id: 'grow-child', name: '성장기', description: '꼬마로 성장했어요', emoji: '🌱', reward: 50, check: s => s.pets.some(p => ['child','teen','adult'].includes(getGrowthStage(p.type, p.stats.bond))) },
+  { id: 'grow-teen', name: '청소년기', description: '청소년으로 성장했어요', emoji: '🌿', reward: 100, check: s => s.pets.some(p => ['teen','adult'].includes(getGrowthStage(p.type, p.stats.bond))) },
+  { id: 'grow-adult', name: '완전체', description: '어른으로 성장했어요', emoji: '🌳', reward: 300, check: s => s.pets.some(p => getGrowthStage(p.type, p.stats.bond) === 'adult') },
 
   // === 경제 ===
   { id: 'gold-500', name: '저축의 시작', description: '골드를 500 모았어요', emoji: '💰', reward: 20, check: s => s.totalGoldEarned >= 500 },
@@ -62,7 +61,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'highscore-100', name: '고득점', description: '미니게임 100점 달성', emoji: '🏅', reward: 80, check: s => s.miniGameHighScore >= 100 },
 
   // === 유대감 ===
-  { id: 'bond-100', name: '친한 사이', description: '유대감 100 달성', emoji: '❤️', reward: 50, check: s => getActiveStats(s).bond >= 100 },
+  { id: 'bond-100', name: '친한 사이', description: '유대감 100 달성', emoji: '❤️', reward: 50, check: s => s.pets.some(p => p.stats.bond >= 100) },
 ];
 
 /** 새로 달성된 업적 확인 */

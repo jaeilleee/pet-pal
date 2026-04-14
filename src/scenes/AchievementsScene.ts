@@ -61,7 +61,7 @@ export class AchievementsScene implements Scene {
       this.ctx.sound.playClick();
       import('./HomeScene').then(m => {
         this.ctx.scenes.switchTo(() => new m.HomeScene(this.ctx));
-      });
+      }).catch(err => console.error('[AchievementsScene] HomeScene load failed', err));
     };
     backBtn.addEventListener('click', handler);
     this.cleanups.push(() => backBtn.removeEventListener('click', handler));

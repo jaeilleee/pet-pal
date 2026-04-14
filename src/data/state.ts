@@ -10,7 +10,7 @@ export const STATE_VERSION = 2;
 export const MAX_PETS = 3;
 
 /** 펫 슬롯 해금 비용 */
-export const PET_SLOT_COSTS = [0, 500, 2000];
+export const PET_SLOT_COSTS = [0, 300, 1500];
 
 export interface PetStats {
   hunger: number;     // 0-100
@@ -125,8 +125,8 @@ export function createInitialState(): PetPalState {
     unlockedSlots: 1,
     lastDecayAt: Date.now(),
 
-    gold: 100,
-    totalGoldEarned: 100,
+    gold: 150,
+    totalGoldEarned: 150,
     ownedItems: [],
     ownedFurniture: [],
 
@@ -182,8 +182,8 @@ export function migratePetStats(raw: Partial<PetStats> | undefined): PetStats {
 export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
   const base = { ...createInitialState(), ...raw };
 
-  // 이미 v2면 스킵
-  if (Array.isArray(base.pets) && base.pets.length > 0) {
+  // 이미 v2면 스킵 (빈 배열도 v2)
+  if (Array.isArray(base.pets)) {
     base.version = STATE_VERSION;
     // pets 내부 마이그레이션
     base.pets = (base.pets as PetData[]).map(p => ({

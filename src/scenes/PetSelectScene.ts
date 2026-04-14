@@ -144,19 +144,24 @@ export class PetSelectScene implements Scene {
         ? Math.max(...state.pets.map(p => p.id)) + 1
         : 1;
       const newPet = createPetData(this.selected, nameInput.value.trim(), newId);
-
-      state.pets.push(newPet);
+      const newPets = [...state.pets, newPet];
 
       if (this.mode === 'first') {
-        // 레거시 호환: petType/petName도 설정
-        state.petType = this.selected;
-        state.petName = nameInput.value.trim();
+        this.ctx.state.current = {
+          ...state,
+          pets: newPets,
+          petType: this.selected,
+          petName: nameInput.value.trim(),
+        };
       } else {
-        // 추가 모드: 새 펫을 활성으로
-        state.activePetIndex = state.pets.length - 1;
+        this.ctx.state.current = {
+          ...state,
+          pets: newPets,
+          activePetIndex: newPets.length - 1,
+        };
       }
 
-      this.ctx.save.save(state);
+      this.ctx.save.save(this.ctx.state.current);
       showToast(`${newPet.name}이(가) 가족이 됐어요!`);
 
       import('./HomeScene').then(m => {
