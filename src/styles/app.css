@@ -1251,3 +1251,139 @@
   margin: 0;
 }
 .photo-exit-btn:active { transform: scale(0.92); }
+
+/* ===== Pet Title Label ===== */
+.pet-title-label {
+  font-size: 10px;
+  color: var(--primary);
+  font-weight: 700;
+  display: block;
+  margin-bottom: 1px;
+}
+
+/* ===== Allcare Button ===== */
+.action-btn-allcare {
+  background: linear-gradient(135deg, #FF6B9D, #FF85B3) !important;
+  color: white !important;
+  border: none !important;
+}
+.action-btn-allcare:active {
+  transform: scale(0.92);
+}
+
+/* ===== Visitor Book Scene ===== */
+.visitor-book-scene {
+  background: var(--bg-secondary);
+  padding-bottom: 24px;
+}
+
+.visitor-book-progress {
+  padding: 12px 16px;
+  text-align: center;
+}
+
+.visitor-progress-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.visitor-progress-bar {
+  margin-top: 6px;
+  height: 8px;
+  background: rgba(0,0,0,0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.visitor-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.visitor-book-list {
+  padding: 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.visitor-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  box-shadow: var(--shadow-card);
+}
+
+.visitor-card.unknown {
+  opacity: 0.5;
+}
+
+.visitor-card.legendary {
+  border-left: 3px solid #FFD700;
+}
+
+.visitor-card.rare {
+  border-left: 3px solid #7B68EE;
+}
+
+.visitor-card-emoji {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.visitor-card-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.visitor-card-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.visitor-card-gift {
+  font-size: 11px;
+  color: var(--text-light);
+}
+
+.visitor-card-msg {
+  font-size: 10px;
+  color: var(--text-medium);
+  font-style: italic;
+}
+
+.visitor-card-rarity {
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ===== Profile Actions ===== */
+.profile-actions {
+  padding: 8px 0;
+}
+
+.btn-profile-action {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.btn-profile-action:active {
+  transform: scale(0.98);
+  background: rgba(0,0,0,0.02);
+}

@@ -11,6 +11,7 @@ import {
   getActivePet, getActiveStats, applyEffectsToPet,
   decayAllPets, overallMood, moodEmoji,
   checkSickness, healPet, checkRunawayWarning,
+  getActivePetTitle,
 } from '../data/state';
 import { getItemById } from '../data/items';
 import {
@@ -25,7 +26,7 @@ import { showToast } from '../ui/Toast';
 import { PetCanvas } from '../game/PetCanvas';
 import { checkNewAchievements, claimAchievements } from '../data/achievements';
 import { getPersonalitySpeech, getSpeechFromCategory } from '../data/speeches';
-import { rollVisitor, VISITORS } from '../data/visitors';
+import { rollVisitor, VISITORS, SEASONAL_VISITORS } from '../data/visitors';
 import { rollLuckyDrop } from '../data/lucky-drops';
 import { generateAutoEvents } from '../data/auto-events';
 
@@ -107,6 +108,7 @@ export class HomeScene implements Scene {
         <div id="expedition-indicator">${this.renderExpeditionIndicator(state)}</div>
 
         <div class="pet-name-display">
+          <span class="pet-title-label" id="pet-title-label">${getActivePetTitle(activePet, state)}</span>
           <span class="pet-name-label" id="pet-name-label">${activePet.name}</span>
           <span class="pet-stage-label" id="pet-stage-label">${stageInfo.name}</span>
         </div>
@@ -127,6 +129,7 @@ export class HomeScene implements Scene {
           <button class="action-btn" data-action="clean"><span>🛁</span>씻기</button>
           <button class="action-btn" data-action="talk"><span>💬</span>대화</button>
           ${activePet.isSick ? '<button class="action-btn action-btn-heal" data-action="heal"><span>💊</span>치료 50G</button>' : ''}
+          <button class="action-btn action-btn-allcare" data-action="allcare"><span>💖</span>올케어</button>
           <button class="action-btn" data-action="expedition"><span>🗺️</span>탐험</button>
           <button class="action-btn" data-action="shop"><span>🛍️</span>상점</button>
           <button class="action-btn" data-action="minigame"><span>🎮</span>게임</button>
@@ -147,6 +150,7 @@ export class HomeScene implements Scene {
     const expPetIndices = state.expeditions.map(e => e.petIndex);
     this.petCanvas.setExpeditionPets(expPetIndices);
     if (isSleeping) this.petCanvas.setEmotion('sleeping');
+    this.petCanvas.setRoomTheme(state.activeRoomTheme);
     this.petCanvas.setFurniture(state.ownedFurniture.map(id => getItemById(id)?.emoji ?? ''));
     if (activePet.equippedAccessory) {
       this.petCanvas.setAccessory(getItemById(activePet.equippedAccessory)?.emoji ?? null);
@@ -340,6 +344,7 @@ export class HomeScene implements Scene {
         this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'feed');
         this.petCanvas?.setEmotion('eating');
         this.petCanvas?.showSpeech('맛있어!');
+        this.petCanvas?.showEmoticon('😋');
         this.petCanvas?.emitParticles('sparkle', 5);
         this.petCanvas?.triggerJealousy();
         this.ctx.sound.playHarvest();
@@ -350,6 +355,7 @@ export class HomeScene implements Scene {
         this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'play');
         this.petCanvas?.setEmotion('happy');
         this.petCanvas?.showSpeech('재밌다!');
+        this.petCanvas?.showEmoticon('🤩');
         this.petCanvas?.emitParticles('star', 6);
         this.petCanvas?.triggerJealousy();
         this.ctx.sound.playLucky();
@@ -360,6 +366,7 @@ export class HomeScene implements Scene {
         this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'walk');
         this.petCanvas?.setEmotion('happy');
         this.petCanvas?.showSpeech('산책 좋아!');
+        this.petCanvas?.showEmoticon('🌈');
         this.petCanvas?.emitParticles('leaf', 5);
         this.petCanvas?.triggerJealousy();
         this.ctx.sound.playMerge();
@@ -369,6 +376,7 @@ export class HomeScene implements Scene {
         this.ctx.state.current.totalBaths++;
         this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'clean');
         this.petCanvas?.showSpeech('깨끗해졌다!');
+        this.petCanvas?.showEmoticon('✨');
         this.petCanvas?.emitParticles('bubble', 8);
         this.petCanvas?.triggerJealousy();
         this.ctx.sound.playWater();
@@ -381,11 +389,15 @@ export class HomeScene implements Scene {
         const activeStats = getActiveStats(this.ctx.state.current);
         this.petCanvas?.setEmotion('love');
         this.petCanvas?.showSpeech(getPetSpeech(activeStats, currentPet?.personality));
+        this.petCanvas?.showEmoticon('💗');
         this.petCanvas?.emitParticles('heart', 6);
         this.petCanvas?.triggerJealousy();
         this.ctx.sound.playClick();
         break;
       }
+      case 'allcare':
+        this.executeAllCare(root);
+        return;
       case 'heal': {
         if (state.gold < 50) {
           showToast('골드가 부족해요! (50G 필요)');
@@ -481,6 +493,37 @@ export class HomeScene implements Scene {
     overlay.querySelector('.mg-close')?.addEventListener('click', () => overlay.remove());
   }
 
+  /** 원터치 올케어: 쿨다운 풀린 액션들 순차 실행 */
+  private executeAllCare(root: HTMLElement): void {
+    const careActions = ['feed', 'play', 'walk', 'clean', 'talk'];
+    const available = careActions.filter(action => {
+      const cooldown = COOLDOWNS[action];
+      if (!cooldown) return true;
+      const petId = this.ctx.state.current.activePetIndex;
+      const key = `${petId}:${action}`;
+      const last = this.lastActionTime[key] ?? 0;
+      return (Date.now() - last) >= cooldown;
+    });
+
+    if (available.length === 0) {
+      showToast('쿨다운 중이에요! 잠시 후 다시 시도하세요');
+      return;
+    }
+
+    let delay = 0;
+    for (const action of available) {
+      setTimeout(() => {
+        this.handleAction(action, root);
+      }, delay);
+      delay += 300;
+    }
+
+    setTimeout(() => {
+      showToast('올케어 완료! 💖');
+      this.petCanvas?.emitParticles('star', 10);
+    }, delay);
+  }
+
   private checkEvolution(prevBond: number): void {
     const pet = getActivePet(this.ctx.state.current);
     if (!pet) return;
@@ -563,7 +606,8 @@ export class HomeScene implements Scene {
 
   /** 방문자 선물 수령 */
   private claimVisitorGift(visitorId: string): void {
-    const visitor = VISITORS.find(v => v.id === visitorId);
+    const visitor = VISITORS.find(v => v.id === visitorId)
+      ?? SEASONAL_VISITORS.find(v => v.id === visitorId);
     if (!visitor) return;
 
     const state = this.ctx.state.current;
@@ -744,6 +788,9 @@ export class HomeScene implements Scene {
     const moodEl = root.querySelector('#mood-display');
     if (moodEl) moodEl.textContent = moodEmoji(pet.stats);
 
+    const titleEl = root.querySelector('#pet-title-label');
+    if (titleEl) titleEl.textContent = getActivePetTitle(pet, state);
+
     const nameEl = root.querySelector('#pet-name-label');
     if (nameEl) nameEl.textContent = pet.name;
 
@@ -771,6 +818,7 @@ export class HomeScene implements Scene {
     this.petCanvas?.setPets(state.pets);
     this.petCanvas?.setActivePet(state.activePetIndex);
     this.petCanvas?.setStats(pet.stats);
+    this.petCanvas?.setRoomTheme(state.activeRoomTheme);
 
     this.updateJealousyAlert(root);
   }

@@ -114,6 +114,9 @@ export interface PetPalState {
   weeklyBestScore: number;
   weeklyStartDate: string;  // ISO 주 시작일 (월요일)
   weeklyTier: 'none' | 'bronze' | 'silver' | 'gold' | 'diamond';
+
+  // === Room Theme ===
+  activeRoomTheme: string | null;
 }
 
 export interface DiaryEntry {
@@ -187,6 +190,7 @@ export function createInitialState(): PetPalState {
     weeklyBestScore: 0,
     weeklyStartDate: '',
     weeklyTier: 'none',
+    activeRoomTheme: null,
   };
 }
 
@@ -239,6 +243,8 @@ export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
     if (typeof base.weeklyBestScore !== 'number') base.weeklyBestScore = 0;
     if (typeof base.weeklyStartDate !== 'string') base.weeklyStartDate = '';
     if (!base.weeklyTier) base.weeklyTier = 'none';
+    // room theme 마이그레이션
+    if (base.activeRoomTheme === undefined) base.activeRoomTheme = null;
     return base as PetPalState;
   }
 
@@ -423,6 +429,18 @@ export function moodEmoji(stats: PetStats): string {
   if (mood >= 40) return '😐';
   if (mood >= 20) return '😟';
   return '😢';
+}
+
+/** 행동 패턴 기반 펫 칭호 */
+export function getActivePetTitle(pet: PetData, state: PetPalState): string {
+  if (state.streak > 14) return '개근상 🔥';
+  if (state.miniGameHighScore > 200) return '게임왕 🎮';
+  if (pet.stats.bond > 200) return '사랑둥이 💕';
+  if (state.totalWalks > 20) return '산책러 🚶';
+  // totalFeeds가 다른 행동보다 많으면 먹보왕
+  const maxAction = Math.max(state.totalPlays, state.totalWalks, state.totalBaths, state.totalTalks);
+  if (state.totalFeeds > maxAction && state.totalFeeds > 10) return '먹보왕 👑';
+  return '귀요미 ✨';
 }
 
 export function generateDiaryEntry(pet: PetData): DiaryEntry {

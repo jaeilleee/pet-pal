@@ -2,7 +2,7 @@
  * Items -- 먹이, 간식, 액세서리, 가구 정의
  */
 
-export type ItemCategory = 'food' | 'snack' | 'accessory' | 'furniture';
+export type ItemCategory = 'food' | 'snack' | 'accessory' | 'furniture' | 'room-theme';
 
 export interface ItemDef {
   id: string;
@@ -63,6 +63,12 @@ export const ITEMS: ItemDef[] = [
   { id: 'castle', name: '미니 성', emoji: '🏰', category: 'furniture', price: 1000, effects: { happiness: 40, energy: 25, bond: 15 }, description: '웅장한 미니 성', unlockBond: 350 },
   { id: 'garden', name: '실내 정원', emoji: '🌺', category: 'furniture', price: 600, effects: { happiness: 30, cleanliness: 15, bond: 10 }, description: '꽃이 피는 정원', unlockBond: 250 },
   { id: 'playground', name: '놀이공원', emoji: '🎡', category: 'furniture', price: 1500, effects: { happiness: 50, energy: 20, bond: 20 }, description: '미니 놀이공원', unlockBond: 400 },
+
+  // === Room Theme (방 테마) ===
+  { id: 'theme-cafe', name: '카페', emoji: '☕', category: 'room-theme', price: 200, effects: { happiness: 5 }, description: '아늑한 카페 분위기' },
+  { id: 'theme-space', name: '우주', emoji: '🚀', category: 'room-theme', price: 300, effects: { happiness: 8 }, description: '신비로운 우주 배경' },
+  { id: 'theme-forest', name: '숲속', emoji: '🌿', category: 'room-theme', price: 250, effects: { happiness: 6 }, description: '평화로운 숲속' },
+  { id: 'theme-pink', name: '핑크룸', emoji: '🎀', category: 'room-theme', price: 350, effects: { happiness: 10 }, description: '산리오 감성 핑크' },
 ];
 
 export function getItemById(id: string): ItemDef | undefined {

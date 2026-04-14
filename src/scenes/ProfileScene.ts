@@ -57,11 +57,16 @@ export class ProfileScene implements Scene {
           <h3>${activePet.name}의 일기</h3>
           ${this.renderDiary(state)}
         </div>
+
+        <div class="profile-section profile-actions">
+          <button class="btn-profile-action" id="btn-visitor-book">📖 방문자 도감</button>
+        </div>
       </div>
     `;
 
     this.drawProfilePet(root, activePet.type, stage, stageInfo.size);
     this.bindBack(root);
+    this.bindVisitorBook(root);
   }
 
   private maybeGenerateDiary(state: PetPalState, pet: import('../data/state').PetData): void {
@@ -131,6 +136,19 @@ export class ProfileScene implements Scene {
       anim.emotion = 'happy';
       drawPet(pctx, petType, stage, anim, cSize / 2, cSize / 2 + 5, size * 0.8);
     }
+  }
+
+  private bindVisitorBook(root: HTMLElement): void {
+    const btn = root.querySelector('#btn-visitor-book');
+    if (!btn) return;
+    const handler = (): void => {
+      this.ctx.sound.playClick();
+      import('./VisitorBookScene').then(m => {
+        this.ctx.scenes.switchTo(() => new m.VisitorBookScene(this.ctx));
+      }).catch(err => console.error('[ProfileScene] VisitorBook load failed', err));
+    };
+    btn.addEventListener('click', handler);
+    this.cleanups.push(() => btn.removeEventListener('click', handler));
   }
 
   private bindBack(root: HTMLElement): void {

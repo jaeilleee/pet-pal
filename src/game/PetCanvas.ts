@@ -71,6 +71,12 @@ export class PetCanvas {
   private visitorBounceTime = 0;
   private tearTimer = 0;
   private expeditionPetIndices: number[] = [];
+  private roomTheme: string | null = null;
+  /** 이모티콘 풍선 */
+  private emoticonEmoji: string | null = null;
+  private emoticonTimer = 0;
+  private emoticonScale = 0;
+  private emoticonAlpha = 1;
 
   constructor(container: HTMLElement) {
     this.particles = new ParticleSystem();
@@ -294,6 +300,18 @@ export class PetCanvas {
     this.onPetSelected = cb;
   }
 
+  setRoomTheme(theme: string | null): void {
+    this.roomTheme = theme;
+  }
+
+  /** 활성 펫 위에 큰 이모지(50px) 바운스 표시 후 페이드아웃 */
+  showEmoticon(emoji: string): void {
+    this.emoticonEmoji = emoji;
+    this.emoticonTimer = 1.5;
+    this.emoticonScale = 0;
+    this.emoticonAlpha = 1;
+  }
+
   setFurniture(items: string[]): void {
     this.furniture = items;
   }
@@ -381,6 +399,22 @@ export class PetCanvas {
     // 방문자 바운스 타이머
     if (this.visitorEmoji) {
       this.visitorBounceTime += dt;
+    }
+
+    // 이모티콘 풍선 타이머
+    if (this.emoticonTimer > 0) {
+      this.emoticonTimer -= dt;
+      // 처음 0.3초: 바운스 스케일 업
+      if (this.emoticonTimer > 1.2) {
+        this.emoticonScale = Math.min(1, this.emoticonScale + dt * 5);
+      }
+      // 마지막 0.4초: 페이드아웃
+      if (this.emoticonTimer < 0.4) {
+        this.emoticonAlpha = Math.max(0, this.emoticonTimer / 0.4);
+      }
+      if (this.emoticonTimer <= 0) {
+        this.emoticonEmoji = null;
+      }
     }
 
     // 눈물 타이머 (happiness < 15)
@@ -559,6 +593,9 @@ export class PetCanvas {
       this.renderSinglePet(c, pet, index === this.activePetIndex);
     }
 
+    // 이모티콘 풍선 렌더
+    this.drawEmoticon(c);
+
     // 극단적 스탯 배경 오버레이
     this.drawStatOverlay(c);
 
@@ -596,6 +633,29 @@ export class PetCanvas {
     c.font = '22px Apple Color Emoji, Segoe UI Emoji';
     c.textAlign = 'center';
     c.fillText(this.visitorEmoji, vx, vy);
+  }
+
+  /** 이모티콘 풍선 (활성 펫 위에 큰 이모지 바운스) */
+  private drawEmoticon(c: CanvasRenderingContext2D): void {
+    if (!this.emoticonEmoji || this.emoticonTimer <= 0) return;
+    const pet = this.pets[this.activePetIndex];
+    if (!pet) return;
+
+    const baseY = pet.y - pet.size * 0.6 - 20;
+    // 바운스 효과: sine wave
+    const bounce = Math.sin(this.emoticonTimer * 8) * 5 * this.emoticonScale;
+    const ey = baseY - bounce;
+
+    c.save();
+    c.globalAlpha = this.emoticonAlpha;
+    const scale = 0.5 + this.emoticonScale * 0.5; // 0.5 -> 1.0
+    c.translate(pet.x, ey);
+    c.scale(scale, scale);
+    c.font = '50px Apple Color Emoji, Segoe UI Emoji';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(this.emoticonEmoji, 0, 0);
+    c.restore();
   }
 
   private renderSinglePet(
@@ -715,6 +775,12 @@ export class PetCanvas {
   }
 
   private drawBackground(c: CanvasRenderingContext2D): void {
+    // 테마가 적용되어 있으면 테마 배경
+    if (this.roomTheme) {
+      this.drawThemeBackground(c);
+      return;
+    }
+
     const timeOfDay = getTimeOfDay();
     let colors: [string, string];
     switch (timeOfDay) {
@@ -745,6 +811,108 @@ export class PetCanvas {
     this.drawWindow(c, timeOfDay);
     this.drawWallClock(c, timeOfDay);
     this.drawWallPicture(c);
+  }
+
+  /** 방 테마 배경 렌더링 */
+  private drawThemeBackground(c: CanvasRenderingContext2D): void {
+    switch (this.roomTheme) {
+      case 'theme-cafe':
+        this.drawCafeTheme(c);
+        break;
+      case 'theme-space':
+        this.drawSpaceTheme(c);
+        break;
+      case 'theme-forest':
+        this.drawForestTheme(c);
+        break;
+      case 'theme-pink':
+        this.drawPinkTheme(c);
+        break;
+      default: break;
+    }
+  }
+
+  private drawCafeTheme(c: CanvasRenderingContext2D): void {
+    const grad = c.createLinearGradient(0, 0, 0, this.H);
+    grad.addColorStop(0, '#D7B899');
+    grad.addColorStop(1, '#C4A882');
+    c.fillStyle = grad;
+    c.fillRect(0, 0, this.W, this.H);
+    // 따뜻한 조명
+    const light = c.createRadialGradient(this.W * 0.5, 20, 0, this.W * 0.5, 20, this.H * 0.7);
+    light.addColorStop(0, 'rgba(255,200,100,0.25)');
+    light.addColorStop(1, 'rgba(255,200,100,0)');
+    c.fillStyle = light;
+    c.fillRect(0, 0, this.W, this.H);
+    // 장식 이모지
+    c.font = '16px Apple Color Emoji, Segoe UI Emoji';
+    c.textAlign = 'center';
+    c.fillText('☕', 30, 35);
+    c.fillText('☕', this.W - 35, 30);
+    c.font = '14px Apple Color Emoji, Segoe UI Emoji';
+    c.fillText('🍰', 60, 25);
+    c.fillText('📖', this.W - 60, 45);
+  }
+
+  private drawSpaceTheme(c: CanvasRenderingContext2D): void {
+    const grad = c.createLinearGradient(0, 0, 0, this.H);
+    grad.addColorStop(0, '#0D0221');
+    grad.addColorStop(1, '#1A0533');
+    c.fillStyle = grad;
+    c.fillRect(0, 0, this.W, this.H);
+    // 별들
+    c.fillStyle = '#FFFFFF';
+    for (let i = 0; i < 30; i++) {
+      const sx = ((i * 137 + 50) % this.W);
+      const sy = ((i * 89 + 20) % (this.H * 0.65));
+      const sr = (i % 3 === 0) ? 1.5 : 0.8;
+      c.beginPath();
+      c.arc(sx, sy, sr, 0, Math.PI * 2);
+      c.fill();
+    }
+    // 행성/장식
+    c.font = '18px Apple Color Emoji, Segoe UI Emoji';
+    c.textAlign = 'center';
+    c.fillText('🪐', 40, 40);
+    c.fillText('🌙', this.W - 45, 30);
+    c.font = '12px Apple Color Emoji, Segoe UI Emoji';
+    c.fillText('⭐', 80, 20);
+    c.fillText('🚀', this.W - 80, 55);
+  }
+
+  private drawForestTheme(c: CanvasRenderingContext2D): void {
+    const grad = c.createLinearGradient(0, 0, 0, this.H);
+    grad.addColorStop(0, '#A8D5BA');
+    grad.addColorStop(1, '#7CB896');
+    c.fillStyle = grad;
+    c.fillRect(0, 0, this.W, this.H);
+    // 나무/덤불
+    c.font = '20px Apple Color Emoji, Segoe UI Emoji';
+    c.textAlign = 'center';
+    c.fillText('🌿', 20, 40);
+    c.fillText('🌿', this.W - 25, 35);
+    c.font = '14px Apple Color Emoji, Segoe UI Emoji';
+    c.fillText('🍄', 55, 50);
+    c.fillText('🌸', this.W - 60, 25);
+    c.fillText('🦋', this.W * 0.5, 20);
+  }
+
+  private drawPinkTheme(c: CanvasRenderingContext2D): void {
+    const grad = c.createLinearGradient(0, 0, 0, this.H);
+    grad.addColorStop(0, '#FFD1DC');
+    grad.addColorStop(1, '#FFB6C1');
+    c.fillStyle = grad;
+    c.fillRect(0, 0, this.W, this.H);
+    // 하트/리본 장식
+    c.font = '16px Apple Color Emoji, Segoe UI Emoji';
+    c.textAlign = 'center';
+    c.fillText('🎀', 25, 30);
+    c.fillText('🎀', this.W - 30, 45);
+    c.font = '12px Apple Color Emoji, Segoe UI Emoji';
+    c.fillText('💖', 60, 22);
+    c.fillText('💖', this.W - 65, 28);
+    c.fillText('🌸', this.W * 0.5 - 30, 18);
+    c.fillText('🌸', this.W * 0.5 + 30, 38);
   }
 
   /** 계절별 배경 장식 */

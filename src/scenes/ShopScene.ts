@@ -19,6 +19,7 @@ const TABS: Array<{ category: ShopTab; label: string; emoji: string }> = [
   { category: 'snack', label: '간식', emoji: '🍪' },
   { category: 'accessory', label: '액세서리', emoji: '🎀' },
   { category: 'furniture', label: '가구', emoji: '🏠' },
+  { category: 'room-theme', label: '테마', emoji: '🎨' },
   { category: 'slot', label: '펫 슬롯', emoji: '🐾' },
 ];
 
@@ -106,7 +107,7 @@ export class ShopScene implements Scene {
           </div>
           <button class="btn-buy ${canBuy ? '' : 'disabled'}" data-id="${item.id}"
                   ${locked || (!canBuy && !owned) ? 'disabled' : ''}>
-            ${owned && (item.category === 'accessory' || item.category === 'furniture') ? '장착' : `${item.price}G`}
+            ${owned && (item.category === 'accessory' || item.category === 'furniture' || item.category === 'room-theme') ? (item.category === 'room-theme' ? (state.activeRoomTheme === item.id ? '해제' : '적용') : '장착') : `${item.price}G`}
           </button>
         </div>
       `;
@@ -196,6 +197,7 @@ export class ShopScene implements Scene {
     const state = this.ctx.state.current;
     if (item.category === 'accessory') return state.ownedItems.includes(item.id);
     if (item.category === 'furniture') return state.ownedFurniture.includes(item.id);
+    if (item.category === 'room-theme') return state.ownedItems.includes(item.id);
     return false;
   }
 
@@ -215,7 +217,7 @@ export class ShopScene implements Scene {
     const state = this.ctx.state.current;
     const activePet = getActivePet(state);
 
-    // 이미 소유한 액세서리/가구: 장착
+    // 이미 소유한 액세서리/가구/테마: 장착/적용
     if (this.isOwned(item)) {
       if (item.category === 'accessory' && activePet) {
         const isEquipped = activePet.equippedAccessory === id;
@@ -223,6 +225,10 @@ export class ShopScene implements Scene {
         pets[state.activePetIndex] = { ...activePet, equippedAccessory: isEquipped ? null : id };
         this.ctx.state.current = { ...state, pets };
         showToast(!isEquipped ? `${item.name} 장착!` : '액세서리 해제');
+      } else if (item.category === 'room-theme') {
+        const isActive = state.activeRoomTheme === id;
+        this.ctx.state.current = { ...state, activeRoomTheme: isActive ? null : id };
+        showToast(!isActive ? `${item.emoji} ${item.name} 테마 적용!` : '기본 테마로 돌아갑니다');
       }
       this.ctx.save.save(this.ctx.state.current);
       this.ctx.sound.playClick();
@@ -255,6 +261,11 @@ export class ShopScene implements Scene {
       updated = { ...updated, ownedFurniture: [...updated.ownedFurniture, id] };
       updated = applyEffectsToPet(updated, idx, item.effects);
       showToast(`${item.name} 설치!`);
+      this.ctx.sound.playCoin();
+    } else if (item.category === 'room-theme') {
+      updated = { ...updated, ownedItems: [...updated.ownedItems, id], activeRoomTheme: id };
+      updated = applyEffectsToPet(updated, idx, item.effects);
+      showToast(`${item.emoji} ${item.name} 테마 적용!`);
       this.ctx.sound.playCoin();
     }
 
