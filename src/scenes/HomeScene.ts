@@ -152,9 +152,8 @@ export class HomeScene implements Scene {
       </button>`;
     }).join('');
 
-    // + 버튼 (슬롯 여유가 있을 때)
-    const canAdd = state.unlockedSlots > state.pets.length;
-    const addBtn = canAdd
+    // + 버튼 (최대 3마리 미만이면 항상 표시)
+    const addBtn = state.pets.length < 3
       ? '<button class="pet-tab pet-tab-add" id="btn-add-pet" title="새 펫 추가">+</button>'
       : '';
 
@@ -231,9 +230,18 @@ export class HomeScene implements Scene {
     if (addBtn) {
       const handler = (): void => {
         this.ctx.sound.playClick();
-        import('./PetSelectScene').then(m => {
-          this.ctx.scenes.switchTo(() => new m.PetSelectScene(this.ctx, 'add'));
-        }).catch(err => console.error('[HomeScene] PetSelect load failed', err));
+        const state = this.ctx.state.current;
+        if (state.pets.length >= state.unlockedSlots) {
+          // 슬롯 미해금 → 상점 안내
+          showToast('상점에서 펫 슬롯을 해금하세요! 🛍️');
+          import('./ShopScene').then(m => {
+            this.ctx.scenes.switchTo(() => new m.ShopScene(this.ctx));
+          }).catch(err => console.error('[HomeScene] Shop load failed', err));
+        } else {
+          import('./PetSelectScene').then(m => {
+            this.ctx.scenes.switchTo(() => new m.PetSelectScene(this.ctx, 'add'));
+          }).catch(err => console.error('[HomeScene] PetSelect load failed', err));
+        }
       };
       addBtn.addEventListener('click', handler);
       this.cleanups.push(() => addBtn.removeEventListener('click', handler));
