@@ -2,7 +2,7 @@
  * Items -- 먹이, 간식, 액세서리, 가구 정의
  */
 
-export type ItemCategory = 'food' | 'snack' | 'accessory' | 'furniture' | 'room-theme';
+export type ItemCategory = 'food' | 'snack' | 'accessory' | 'furniture' | 'room-theme' | 'color';
 
 export interface ItemDef {
   id: string;
@@ -15,6 +15,10 @@ export interface ItemDef {
   description: string;
   /** 해금 조건 (유대감 최소치) */
   unlockBond?: number;
+  /** 색상 아이템용: 대상 펫 타입 */
+  targetPetType?: import('./pets').PetType;
+  /** 색상 아이템용: variant ID */
+  colorVariantId?: string;
 }
 
 export const ITEMS: ItemDef[] = [
@@ -75,6 +79,16 @@ export const ITEMS: ItemDef[] = [
   { id: 'theme-space', name: '우주', emoji: '🚀', category: 'room-theme', price: 300, effects: { happiness: 8 }, description: '신비로운 우주 배경' },
   { id: 'theme-forest', name: '숲속', emoji: '🌿', category: 'room-theme', price: 250, effects: { happiness: 6 }, description: '평화로운 숲속' },
   { id: 'theme-pink', name: '핑크룸', emoji: '🎀', category: 'room-theme', price: 350, effects: { happiness: 10 }, description: '산리오 감성 핑크' },
+
+  // === Color Variants (색상 변형) ===
+  { id: 'color-dog-white', name: '백구', emoji: '🤍', category: 'color', price: 150, effects: { bond: 3 }, description: '하얀 강아지', targetPetType: 'dog', colorVariantId: 'white' },
+  { id: 'color-dog-black', name: '흑구', emoji: '🖤', category: 'color', price: 150, effects: { bond: 3 }, description: '검정 강아지', targetPetType: 'dog', colorVariantId: 'black' },
+  { id: 'color-cat-orange', name: '치즈', emoji: '🧡', category: 'color', price: 150, effects: { bond: 3 }, description: '치즈 고양이', targetPetType: 'cat', colorVariantId: 'orange' },
+  { id: 'color-cat-black', name: '까만이', emoji: '🖤', category: 'color', price: 150, effects: { bond: 3 }, description: '검정 고양이', targetPetType: 'cat', colorVariantId: 'black' },
+  { id: 'color-bird-blue', name: '파랑새', emoji: '💙', category: 'color', price: 150, effects: { bond: 3 }, description: '파란 새', targetPetType: 'bird', colorVariantId: 'blue' },
+  { id: 'color-bird-green', name: '초록새', emoji: '💚', category: 'color', price: 150, effects: { bond: 3 }, description: '초록 새', targetPetType: 'bird', colorVariantId: 'green' },
+  { id: 'color-pig-peach', name: '복숭아', emoji: '🧡', category: 'color', price: 150, effects: { bond: 3 }, description: '복숭아색 돼지', targetPetType: 'pig', colorVariantId: 'peach' },
+  { id: 'color-reptile-blue', name: '파랑이', emoji: '💙', category: 'color', price: 150, effects: { bond: 3 }, description: '파란 도마뱀', targetPetType: 'reptile', colorVariantId: 'blue' },
 ];
 
 export function getItemById(id: string): ItemDef | undefined {

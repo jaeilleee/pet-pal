@@ -20,6 +20,7 @@ const TABS: Array<{ category: ShopTab; label: string; emoji: string }> = [
   { category: 'accessory', label: '액세서리', emoji: '🎀' },
   { category: 'furniture', label: '가구', emoji: '🏠' },
   { category: 'room-theme', label: '테마', emoji: '🎨' },
+  { category: 'color', label: '색상', emoji: '🎨' },
   { category: 'slot', label: '펫 슬롯', emoji: '🐾' },
 ];
 
@@ -90,7 +91,12 @@ export class ShopScene implements Scene {
     const state = this.ctx.state.current;
     const activePet = getActivePet(state);
     const bond = activePet?.stats.bond ?? 0;
-    const items = ITEMS.filter(i => i.category === this.activeTab);
+    let items = ITEMS.filter(i => i.category === this.activeTab);
+
+    // 색상 탭: 현재 펫 타입에 맞는 아이템만 표시
+    if (this.activeTab === 'color' && activePet) {
+      items = items.filter(i => i.targetPetType === activePet.type);
+    }
 
     itemsEl.innerHTML = items.map(item => {
       const locked = item.unlockBond !== undefined && bond < item.unlockBond;
@@ -107,7 +113,7 @@ export class ShopScene implements Scene {
           </div>
           <button class="btn-buy ${canBuy ? '' : 'disabled'}" data-id="${item.id}"
                   ${locked || (!canBuy && !owned) ? 'disabled' : ''}>
-            ${owned && (item.category === 'accessory' || item.category === 'furniture' || item.category === 'room-theme') ? (item.category === 'room-theme' ? (state.activeRoomTheme === item.id ? '해제' : '적용') : '장착') : `${item.price}G`}
+            ${owned && (item.category === 'accessory' || item.category === 'furniture' || item.category === 'room-theme' || item.category === 'color') ? (item.category === 'room-theme' ? (state.activeRoomTheme === item.id ? '해제' : '적용') : item.category === 'color' ? (activePet?.colorVariant === item.colorVariantId ? '해제' : '적용') : '장착') : `${item.price}G`}
           </button>
         </div>
       `;
@@ -198,6 +204,7 @@ export class ShopScene implements Scene {
     if (item.category === 'accessory') return state.ownedItems.includes(item.id);
     if (item.category === 'furniture') return state.ownedFurniture.includes(item.id);
     if (item.category === 'room-theme') return state.ownedItems.includes(item.id);
+    if (item.category === 'color') return state.ownedItems.includes(item.id);
     return false;
   }
 
@@ -217,7 +224,7 @@ export class ShopScene implements Scene {
     const state = this.ctx.state.current;
     const activePet = getActivePet(state);
 
-    // 이미 소유한 액세서리/가구/테마: 장착/적용
+    // 이미 소유한 액세서리/가구/테마/색상: 장착/적용
     if (this.isOwned(item)) {
       if (item.category === 'accessory' && activePet) {
         const isEquipped = activePet.equippedAccessory === id;
@@ -229,6 +236,12 @@ export class ShopScene implements Scene {
         const isActive = state.activeRoomTheme === id;
         this.ctx.state.current = { ...state, activeRoomTheme: isActive ? null : id };
         showToast(!isActive ? `${item.emoji} ${item.name} 테마 적용!` : '기본 테마로 돌아갑니다');
+      } else if (item.category === 'color' && activePet && item.colorVariantId) {
+        const isActive = activePet.colorVariant === item.colorVariantId;
+        const pets = [...state.pets];
+        pets[state.activePetIndex] = { ...activePet, colorVariant: isActive ? 'default' : item.colorVariantId };
+        this.ctx.state.current = { ...state, pets };
+        showToast(!isActive ? `${item.emoji} ${item.name} 색상 적용!` : '기본 색상으로 돌아갑니다');
       }
       this.ctx.save.save(this.ctx.state.current);
       this.ctx.sound.playClick();
@@ -266,6 +279,13 @@ export class ShopScene implements Scene {
       updated = { ...updated, ownedItems: [...updated.ownedItems, id], activeRoomTheme: id };
       updated = applyEffectsToPet(updated, idx, item.effects);
       showToast(`${item.emoji} ${item.name} 테마 적용!`);
+      this.ctx.sound.playCoin();
+    } else if (item.category === 'color' && item.colorVariantId) {
+      const pets = [...updated.pets];
+      pets[idx] = { ...pets[idx], colorVariant: item.colorVariantId };
+      updated = { ...updated, ownedItems: [...updated.ownedItems, id], pets };
+      updated = applyEffectsToPet(updated, idx, item.effects);
+      showToast(`${item.emoji} ${item.name} 색상 적용!`);
       this.ctx.sound.playCoin();
     }
 

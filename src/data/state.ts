@@ -43,6 +43,8 @@ export interface PetData {
   isRunaway: boolean;
   /** 가출 시작 시각 (ms) */
   runawayAt: number;
+  /** 색상 변형 ID (기본: 'default') */
+  colorVariant: string;
 }
 
 export interface PetPalState {
@@ -123,6 +125,15 @@ export interface PetPalState {
 
   // === Room Theme ===
   activeRoomTheme: string | null;
+
+  // === Visitor Quest ===
+  activeVisitorQuest: {
+    visitorId: string;
+    type: 'feed' | 'play' | 'walk';
+    target: number;
+    progress: number;
+    reward: number;
+  } | null;
 }
 
 export interface DiaryEntry {
@@ -155,6 +166,7 @@ export function createPetData(type: PetType, name: string, id: number): PetData 
     personalityPoints: { active: 0, foodie: 0, gentle: 0, playful: 0, sleepy: 0 },
     isRunaway: false,
     runawayAt: 0,
+    colorVariant: 'default',
   };
 }
 
@@ -200,6 +212,7 @@ export function createInitialState(): PetPalState {
     weeklyStartDate: '',
     weeklyTier: 'none',
     activeRoomTheme: null,
+    activeVisitorQuest: null,
   };
 }
 
@@ -247,6 +260,7 @@ export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
         : { active: 0, foodie: 0, gentle: 0, playful: 0, sleepy: 0 },
       isRunaway: typeof p.isRunaway === 'boolean' ? p.isRunaway : false,
       runawayAt: typeof p.runawayAt === 'number' ? p.runawayAt : 0,
+      colorVariant: typeof p.colorVariant === 'string' ? p.colorVariant : 'default',
     }));
     // visitor 시스템 마이그레이션
     if (!Array.isArray(base.visitorLog)) base.visitorLog = [];
@@ -259,6 +273,8 @@ export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
     if (!base.weeklyTier) base.weeklyTier = 'none';
     // room theme 마이그레이션
     if (base.activeRoomTheme === undefined) base.activeRoomTheme = null;
+    // visitor quest 마이그레이션
+    if (base.activeVisitorQuest === undefined) base.activeVisitorQuest = null;
     return base as PetPalState;
   }
 
@@ -286,6 +302,7 @@ export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
       personalityPoints: { active: 0, foodie: 0, gentle: 0, playful: 0, sleepy: 0 },
       isRunaway: false,
       runawayAt: 0,
+      colorVariant: 'default',
     });
   }
 

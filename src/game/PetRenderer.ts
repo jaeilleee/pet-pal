@@ -9,6 +9,53 @@
 import type { PetType, GrowthStage } from '../data/pets';
 import type { PetStats } from '../data/state';
 
+/** 색상 변형 정의 */
+export interface ColorVariant {
+  id: string;
+  name: string;
+  body: string;
+  bodyLight: string;
+  accent: string;
+}
+
+export const COLOR_VARIANTS: Record<PetType, ColorVariant[]> = {
+  dog: [
+    { id: 'default', name: '기본', body: '#C4915C', bodyLight: '#E0B88A', accent: '#A07040' },
+    { id: 'white', name: '백구', body: '#F5F5F5', bodyLight: '#FFFFFF', accent: '#E0E0E0' },
+    { id: 'black', name: '흑구', body: '#424242', bodyLight: '#616161', accent: '#212121' },
+  ],
+  cat: [
+    { id: 'default', name: '기본', body: '#9E9E9E', bodyLight: '#C8C8C8', accent: '#757575' },
+    { id: 'orange', name: '치즈', body: '#FFB74D', bodyLight: '#FFCC80', accent: '#F57C00' },
+    { id: 'black', name: '까만이', body: '#37474F', bodyLight: '#546E7A', accent: '#263238' },
+  ],
+  bird: [
+    { id: 'default', name: '기본', body: '#FFC107', bodyLight: '#FFD54F', accent: '#FF9800' },
+    { id: 'blue', name: '파랑새', body: '#42A5F5', bodyLight: '#90CAF9', accent: '#1E88E5' },
+    { id: 'green', name: '초록새', body: '#66BB6A', bodyLight: '#A5D6A7', accent: '#43A047' },
+  ],
+  pig: [
+    { id: 'default', name: '기본', body: '#F48FB1', bodyLight: '#F8BBD0', accent: '#EC407A' },
+    { id: 'peach', name: '복숭아', body: '#FFAB91', bodyLight: '#FFCCBC', accent: '#FF7043' },
+  ],
+  reptile: [
+    { id: 'default', name: '기본', body: '#66BB6A', bodyLight: '#81C784', accent: '#388E3C' },
+    { id: 'blue', name: '파랑이', body: '#42A5F5', bodyLight: '#90CAF9', accent: '#1E88E5' },
+  ],
+};
+
+/** 색상 variant에 따른 색상 팔레트 반환 */
+export function getColorPalette(
+  petType: PetType,
+  variantId?: string,
+): { body: string; bodyLight: string; accent: string; eyeColor: string } {
+  const base = PET_COLORS[petType];
+  if (!variantId || variantId === 'default') return base;
+  const variant = COLOR_VARIANTS[petType]?.find(v => v.id === variantId);
+  if (!variant) return base;
+  return { body: variant.body, bodyLight: variant.bodyLight, accent: variant.accent, eyeColor: base.eyeColor };
+}
+
 /** 펫 색상 팔레트 (채도 20% 강화) */
 const PET_COLORS: Record<PetType, { body: string; bodyLight: string; accent: string; eyeColor: string }> = {
   dog: { body: '#C4915C', bodyLight: '#E0B88A', accent: '#A07040', eyeColor: '#3D2B15' },
@@ -92,8 +139,9 @@ export function drawPet(
   cy: number,
   size: number,
   stats?: PetStats | null,
+  colorVariant?: string,
 ): void {
-  const colors = PET_COLORS[petType];
+  const colors = getColorPalette(petType, colorVariant);
   const ratios = STAGE_RATIOS[stage];
   const s = size * ratios.bodyScale;
   const headR = s * ratios.headRatio;

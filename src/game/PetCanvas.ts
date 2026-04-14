@@ -48,6 +48,8 @@ interface CanvasPet {
   followingPetIndex: number;
   /** 아픈 상태 */
   isSick: boolean;
+  /** 색상 변형 ID */
+  colorVariant: string;
 }
 
 export class PetCanvas {
@@ -161,6 +163,7 @@ export class PetCanvas {
       interactionCooldown: 0,
       followingPetIndex: -1,
       isSick: pd.isSick,
+      colorVariant: pd.colorVariant ?? 'default',
     };
   }
 
@@ -681,7 +684,7 @@ export class PetCanvas {
       c.scale(-1, 1);
       c.translate(-pet.x, 0);
     }
-    drawPet(c, pet.type, pet.stage, pet.anim, pet.x, renderY, pet.size, pet.stats);
+    drawPet(c, pet.type, pet.stage, pet.anim, pet.x, renderY, pet.size, pet.stats, pet.colorVariant);
     c.restore();
 
     // 꼬리 각도 복원

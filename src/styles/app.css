@@ -1611,3 +1611,70 @@
 .onboarding-dots .dot.active { background: white; }
 .onboarding-tap { font-size: 13px; color: rgba(255,255,255,0.5); }
 .onboarding-yes { width: 160px; padding: 14px 0; font-size: 18px; cursor: pointer; }
+
+/* ===== Memory Game ===== */
+.memory-scene {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+}
+.memory-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  max-width: 340px;
+  width: 100%;
+  margin: 16px auto;
+}
+.memory-card {
+  aspect-ratio: 1;
+  border: 2px solid #E0E0E0;
+  border-radius: var(--radius-lg, 12px);
+  background: linear-gradient(135deg, #fff3e0, #ffe0b2);
+  font-size: 28px;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.3s, background 0.3s;
+}
+.memory-card .card-front {
+  display: none;
+}
+.memory-card .card-back {
+  display: block;
+}
+.memory-card.flipped,
+.memory-card.matched {
+  background: white;
+  border-color: #FFB74D;
+  transform: scale(1.05);
+}
+.memory-card.flipped .card-front,
+.memory-card.matched .card-front {
+  display: block;
+}
+.memory-card.flipped .card-back,
+.memory-card.matched .card-back {
+  display: none;
+}
+.memory-card.matched {
+  background: #E8F5E9;
+  border-color: #66BB6A;
+  opacity: 0.7;
+}
+
+/* ===== Visitor Quest Strip ===== */
+.visitor-quest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(90deg, #FFF8E1, #FFFDE7);
+  border: 1px solid #FFE082;
+  border-radius: var(--radius-lg, 12px);
+  padding: 8px 14px;
+  margin: 4px 12px;
+  font-size: 13px;
+}
+.visitor-quest-emoji { font-size: 20px; }
+.visitor-quest-label { flex: 1; font-weight: 600; }
+.visitor-quest-reward { color: #F57C00; font-weight: 700; }

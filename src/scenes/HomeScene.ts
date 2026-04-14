@@ -146,6 +146,7 @@ export class HomeScene implements Scene {
           <button class="action-btn" data-action="profile"><span>📋</span>프로필</button>
         </div>
 
+        <div id="visitor-quest-strip">${this.renderVisitorQuest(state)}</div>
         <div class="daily-strip" id="daily-strip">${this.renderDailyStrip(state)}</div>
       </div>
     `;
@@ -282,6 +283,21 @@ export class HomeScene implements Scene {
         <span class="stat-value">${Math.round(stats[s.key])}</span>
       </div>
     `).join('');
+  }
+
+  private renderVisitorQuest(state: PetPalState): string {
+    const quest = state.activeVisitorQuest;
+    if (!quest) return '';
+    const visitor = VISITORS.find(v => v.id === quest.visitorId)
+      ?? SEASONAL_VISITORS.find(v => v.id === quest.visitorId);
+    const typeEmoji: Record<string, string> = { feed: '🍖', play: '🎾', walk: '🚶' };
+    return `
+      <div class="visitor-quest">
+        <span class="visitor-quest-emoji">${visitor?.emoji ?? '❓'}</span>
+        <span class="visitor-quest-label">${typeEmoji[quest.type] ?? ''} ${quest.type === 'feed' ? '먹이' : quest.type === 'play' ? '놀기' : '산책'} ${quest.progress}/${quest.target}</span>
+        <span class="visitor-quest-reward">+${quest.reward}G</span>
+      </div>
+    `;
   }
 
   private renderDailyStrip(state: PetPalState): string {
@@ -456,6 +472,9 @@ export class HomeScene implements Scene {
     this.checkPersonalityMutation();
     this.checkAchievements();
 
+    // 방문자 퀘스트 진행
+    this.updateVisitorQuest(action, root);
+
     // 럭키 드롭 (돌봄 액션 후 10% 확률)
     if (['feed', 'play', 'walk', 'clean', 'talk'].includes(action)) {
       this.processLuckyDrop();
@@ -492,6 +511,7 @@ export class HomeScene implements Scene {
         <h3>미니게임 선택</h3>
         <button class="mg-pick-btn" data-game="catch"><span>🥣</span>먹이 캐치</button>
         <button class="mg-pick-btn" data-game="walk"><span>🚶</span>산책 달리기</button>
+        <button class="mg-pick-btn" data-game="memory"><span>🃏</span>기억력 게임</button>
         <button class="mg-pick-btn mg-close">취소</button>
       </div>
     `;
@@ -506,6 +526,11 @@ export class HomeScene implements Scene {
       overlay.remove();
       import('./WalkGameScene').then(m => this.ctx.scenes.switchTo(() => new m.WalkGameScene(this.ctx)))
         .catch(err => console.error('[HomeScene] WalkGame load failed', err));
+    });
+    overlay.querySelector('[data-game="memory"]')?.addEventListener('click', () => {
+      overlay.remove();
+      import('./MemoryGameScene').then(m => this.ctx.scenes.switchTo(() => new m.MemoryGameScene(this.ctx)))
+        .catch(err => console.error('[HomeScene] MemoryGame load failed', err));
     });
     overlay.querySelector('.mg-close')?.addEventListener('click', () => overlay.remove());
   }
@@ -875,6 +900,23 @@ export class HomeScene implements Scene {
       this.petCanvas?.showSpeech(visitor.message);
     }, 1200);
 
+    // 퀘스트가 있으면 activeVisitorQuest 설정
+    if (visitor.quest) {
+      this.ctx.state.current = {
+        ...this.ctx.state.current,
+        activeVisitorQuest: {
+          visitorId: visitor.id,
+          type: visitor.quest.type,
+          target: visitor.quest.target,
+          progress: 0,
+          reward: visitor.quest.reward,
+        },
+      };
+      setTimeout(() => {
+        showToast(`📋 퀘스트: ${visitor.quest!.task} → +${visitor.quest!.reward}G`);
+      }, 3000);
+    }
+
     // 방문자 클릭 시 선물 수령 (3초 후 자동 수령)
     setTimeout(() => {
       this.claimVisitorGift(visitor.id);
@@ -909,6 +951,38 @@ export class HomeScene implements Scene {
 
     // 방문자 퇴장
     this.petCanvas?.setVisitor(null);
+  }
+
+  /** 방문자 퀘스트 진행 체크 */
+  private updateVisitorQuest(action: string, root: HTMLElement): void {
+    const state = this.ctx.state.current;
+    const quest = state.activeVisitorQuest;
+    if (!quest) return;
+
+    // 액션 타입 매핑
+    const actionToType: Record<string, string> = { feed: 'feed', play: 'play', walk: 'walk' };
+    if (actionToType[action] !== quest.type) return;
+
+    const newProgress = quest.progress + 1;
+    if (newProgress >= quest.target) {
+      // 퀘스트 완료!
+      this.ctx.state.current = {
+        ...state,
+        gold: state.gold + quest.reward,
+        totalGoldEarned: state.totalGoldEarned + quest.reward,
+        activeVisitorQuest: null,
+      };
+      showToast(`🎉 퀘스트 완료! +${quest.reward}G`);
+      this.petCanvas?.emitParticles('star', 10);
+      this.ctx.sound.playCoin();
+    } else {
+      this.ctx.state.current = {
+        ...state,
+        activeVisitorQuest: { ...quest, progress: newProgress },
+      };
+      showToast(`📋 퀘스트 진행: ${newProgress}/${quest.target}`);
+    }
+    this.refreshUI(root);
   }
 
   /** 럭키 드롭 처리 */
@@ -1073,6 +1147,10 @@ export class HomeScene implements Scene {
 
     const stageEl = root.querySelector('#pet-stage-label');
     if (stageEl) stageEl.textContent = stageInfo.name;
+
+    // Visitor quest strip 갱신
+    const questStrip = root.querySelector('#visitor-quest-strip');
+    if (questStrip) questStrip.innerHTML = this.renderVisitorQuest(state);
 
     // Daily strip (innerHTML만 교체, 리스너는 위임으로 처리)
     const dailyStrip = root.querySelector('#daily-strip');

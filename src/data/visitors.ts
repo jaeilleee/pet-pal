@@ -2,6 +2,13 @@
  * visitors.ts -- 방문자 시스템 (12종: common/rare/legendary)
  */
 
+export interface VisitorQuest {
+  task: string;
+  type: 'feed' | 'play' | 'walk';
+  target: number;
+  reward: number;
+}
+
 export interface Visitor {
   id: string;
   name: string;
@@ -9,18 +16,19 @@ export interface Visitor {
   rarity: 'common' | 'rare' | 'legendary';
   gift: { gold: number; item?: string };
   message: string;
+  quest?: VisitorQuest;
 }
 
 export const VISITORS: Visitor[] = [
-  { id: 'squirrel', name: '다람쥐', emoji: '🐿️', rarity: 'common', gift: { gold: 10 }, message: '도토리를 가져왔어요!' },
+  { id: 'squirrel', name: '다람쥐', emoji: '🐿️', rarity: 'common', gift: { gold: 10 }, message: '도토리를 가져왔어요!', quest: { task: '먹이 2번 주기', type: 'feed', target: 2, reward: 30 } },
   { id: 'rabbit', name: '토끼', emoji: '🐰', rarity: 'common', gift: { gold: 15 }, message: '당근을 나눠먹자!' },
   { id: 'butterfly', name: '나비', emoji: '🦋', rarity: 'common', gift: { gold: 8 }, message: '예쁜 날개를 보여줄게!' },
   { id: 'ladybug', name: '무당벌레', emoji: '🐞', rarity: 'common', gift: { gold: 12 }, message: '행운을 가져왔어!' },
   { id: 'hedgehog', name: '고슴도치', emoji: '🦔', rarity: 'rare', gift: { gold: 30 }, message: '밤을 선물할게!' },
-  { id: 'fox', name: '여우', emoji: '🦊', rarity: 'rare', gift: { gold: 40 }, message: '비밀 장소를 알려줄까?' },
+  { id: 'fox', name: '여우', emoji: '🦊', rarity: 'rare', gift: { gold: 40 }, message: '비밀 장소를 알려줄까?', quest: { task: '산책 1번 하기', type: 'walk', target: 1, reward: 60 } },
   { id: 'owl', name: '부엉이', emoji: '🦉', rarity: 'rare', gift: { gold: 35 }, message: '지혜를 나눠줄게!' },
   { id: 'deer', name: '사슴', emoji: '🦌', rarity: 'rare', gift: { gold: 45 }, message: '숲에서 왔어요!' },
-  { id: 'unicorn', name: '유니콘', emoji: '🦄', rarity: 'legendary', gift: { gold: 100 }, message: '마법의 선물이야!' },
+  { id: 'unicorn', name: '유니콘', emoji: '🦄', rarity: 'legendary', gift: { gold: 100 }, message: '마법의 선물이야!', quest: { task: '놀기 3번 하기', type: 'play', target: 3, reward: 150 } },
   { id: 'dragon-baby', name: '아기 드래곤', emoji: '🐉', rarity: 'legendary', gift: { gold: 150 }, message: '불꽃을 선물할게!' },
   { id: 'phoenix', name: '불사조', emoji: '🔥', rarity: 'legendary', gift: { gold: 200 }, message: '영원의 깃털이야!' },
   { id: 'fairy', name: '요정', emoji: '🧚', rarity: 'legendary', gift: { gold: 120 }, message: '소원을 들어줄게!' },
