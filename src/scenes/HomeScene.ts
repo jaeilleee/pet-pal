@@ -1248,25 +1248,26 @@ export class HomeScene implements Scene {
           rewardLabels.push(r.label);
         }
 
-        this.ctx.state.current.gold += goldTotal;
-        this.ctx.state.current.totalGoldEarned += goldTotal;
+        let updated = {
+          ...this.ctx.state.current,
+          gold: this.ctx.state.current.gold + goldTotal,
+          totalGoldEarned: this.ctx.state.current.totalGoldEarned + goldTotal,
+        };
         if (bondTotal > 0) {
-          const pets = [...this.ctx.state.current.pets];
+          const pets = [...updated.pets];
           const p = { ...pets[exp.petIndex] };
           p.stats = { ...p.stats, bond: p.stats.bond + bondTotal };
           pets[exp.petIndex] = p;
-          this.ctx.state.current.pets = pets;
+          updated = { ...updated, pets };
         }
-        // 아이템 보상 추가
         if (itemIds.length > 0) {
-          const owned = [...this.ctx.state.current.ownedItems];
-          for (const itemId of itemIds) {
-            if (!owned.includes(itemId)) {
-              owned.push(itemId);
-            }
+          const owned = [...updated.ownedItems];
+          for (const id of itemIds) {
+            if (!owned.includes(id)) owned.push(id);
           }
-          this.ctx.state.current.ownedItems = owned;
+          updated = { ...updated, ownedItems: owned };
         }
+        this.ctx.state.current = updated;
 
         const matchBonus = personalityMatch ? ' (성격 보너스!)' : '';
         showToast(`${expDef.emoji} ${pet.name} 탐험 귀환! ${rewardLabels.join(', ')}${matchBonus}`);
