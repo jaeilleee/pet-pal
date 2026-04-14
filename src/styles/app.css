@@ -1387,3 +1387,68 @@
   transform: scale(0.98);
   background: rgba(0,0,0,0.02);
 }
+
+/* ===== Evolution Cutscene ===== */
+.evolution-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.85);
+  animation: evo-fadein 0.3s ease;
+}
+
+@keyframes evo-fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.evolution-overlay canvas {
+  border-radius: var(--radius-xl);
+  box-shadow: 0 0 40px rgba(255,215,0,0.4);
+}
+
+.evolution-text {
+  text-align: center;
+  margin-top: 16px;
+  animation: evo-text-pop 0.5s ease 0.5s both;
+}
+
+@keyframes evo-text-pop {
+  from { opacity: 0; transform: scale(0.8) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.evolution-congrats {
+  font-size: 24px;
+  font-weight: 800;
+  color: #FFD600;
+  text-shadow: 0 2px 8px rgba(255,214,0,0.5);
+  font-family: 'Nunito', 'Quicksand', sans-serif;
+}
+
+.evolution-desc {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  margin-top: 8px;
+  font-family: 'Quicksand', sans-serif;
+}
+
+/* ===== Synergy Badges ===== */
+.synergy-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #FFF3E0, #FFE0B2);
+  border: 1px solid #FFB74D;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #E65100;
+  margin: 2px;
+  white-space: nowrap;
+  cursor: default;
+}

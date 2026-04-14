@@ -3,7 +3,7 @@
  */
 
 import type { PetType, Personality } from './pets';
-import { PETS } from './pets';
+import { PETS, getActiveSynergies } from './pets';
 import type { DailyTask } from './daily';
 
 export const STATE_VERSION = 2;
@@ -295,6 +295,25 @@ export function getPersonalityMultiplier(personality: Personality, action: strin
   return (PERSONALITY_BONUS[personality]?.[action] as number) ?? 1.0;
 }
 
+/** 가구 개수에 따른 decay 감소 배율 */
+function getFurnitureDecayMultiplier(furnitureCount: number): number {
+  if (furnitureCount >= 3) return 0.7;
+  if (furnitureCount >= 2) return 0.8;
+  if (furnitureCount >= 1) return 0.9;
+  return 1.0;
+}
+
+/** 시너지에 의한 특정 스탯 decay 감소 적용 */
+function getSynergyDecayMultiplier(petTypes: PetType[]): { hungerMult: number } {
+  const synergies = getActiveSynergies(petTypes);
+  let hungerMult = 1.0;
+  for (const s of synergies) {
+    // 먹방 콤비: hunger decay -20%
+    if (s.name === '먹방 콤비') hungerMult *= 0.8;
+  }
+  return { hungerMult };
+}
+
 /** 모든 펫 스탯 감소 */
 export function decayAllPets(state: PetPalState): PetPalState {
   const now = Date.now();
@@ -305,12 +324,18 @@ export function decayAllPets(state: PetPalState): PetPalState {
   const decayTicks = Math.floor(minutes / 10);
   const decay = Math.min(decayTicks, 6);
 
+  // 가구 효과
+  const furnitureMult = getFurnitureDecayMultiplier(state.ownedFurniture.length);
+  // 시너지 효과
+  const petTypes = state.pets.map(p => p.type);
+  const synergyMult = getSynergyDecayMultiplier(petTypes);
+
   const pets = state.pets.map(pet => {
     const stats = { ...pet.stats };
-    stats.hunger = Math.max(5, stats.hunger - decay * 1.5);
-    stats.happiness = Math.max(5, stats.happiness - decay * 1.2);
-    stats.cleanliness = Math.max(5, stats.cleanliness - decay * 0.8);
-    stats.energy = Math.max(5, stats.energy - decay * 0.6);
+    stats.hunger = Math.max(5, stats.hunger - decay * 1.5 * furnitureMult * synergyMult.hungerMult);
+    stats.happiness = Math.max(5, stats.happiness - decay * 1.2 * furnitureMult);
+    stats.cleanliness = Math.max(5, stats.cleanliness - decay * 0.8 * furnitureMult);
+    stats.energy = Math.max(5, stats.energy - decay * 0.6 * furnitureMult);
 
     // sick이면 bond도 접속마다 감소
     if (pet.isSick) {
@@ -356,6 +381,32 @@ export function checkRunawayWarning(pet: PetData): { pet: PetData; warn: boolean
   return { pet, warn: false };
 }
 
+/** 시너지 보너스 배율 계산 */
+function getSynergyBonusMultiplier(
+  petTypes: PetType[],
+  statKey: keyof PetStats,
+): number {
+  const synergies = getActiveSynergies(petTypes);
+  let mult = 1.0;
+  for (const s of synergies) {
+    switch (s.name) {
+      case '으르렁 친구': // happiness +5%
+        if (statKey === 'happiness') mult *= 1.05;
+        break;
+      case '하늘과 땅': // bond +10%
+        if (statKey === 'bond') mult *= 1.1;
+        break;
+      case '사냥 본능': // energy +5%
+        if (statKey === 'energy') mult *= 1.05;
+        break;
+      case '동물농장': // 전체 +10%
+        mult *= 1.1;
+        break;
+    }
+  }
+  return mult;
+}
+
 /** 특정 펫에 효과 적용 */
 export function applyEffectsToPet(
   state: PetPalState,
@@ -368,11 +419,14 @@ export function applyEffectsToPet(
   const mult = action ? getPersonalityMultiplier(pet.personality, action) : 1.0;
   // sick이면 모든 긍정 효과 50% 감소
   const sickPenalty = pet.isSick ? 0.5 : 1.0;
+  // 시너지 보너스
+  const petTypes = state.pets.map(p => p.type);
 
   const stats = { ...pet.stats };
   for (const [key, value] of Object.entries(effects)) {
     const k = key as keyof PetStats;
-    const baseMult = value > 0 ? mult * sickPenalty : 1;
+    const synergyMult = value > 0 ? getSynergyBonusMultiplier(petTypes, k) : 1;
+    const baseMult = value > 0 ? mult * sickPenalty * synergyMult : 1;
     const adjusted = k === 'bond' ? Math.round(value * baseMult) : value * baseMult;
     if (k === 'bond') {
       stats.bond += adjusted;

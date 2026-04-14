@@ -64,6 +64,12 @@ export const ITEMS: ItemDef[] = [
   { id: 'garden', name: '실내 정원', emoji: '🌺', category: 'furniture', price: 600, effects: { happiness: 30, cleanliness: 15, bond: 10 }, description: '꽃이 피는 정원', unlockBond: 250 },
   { id: 'playground', name: '놀이공원', emoji: '🎡', category: 'furniture', price: 1500, effects: { happiness: 50, energy: 20, bond: 20 }, description: '미니 놀이공원', unlockBond: 400 },
 
+  // === Expedition Loot (탐험 전리품) ===
+  { id: 'treasure-map', name: '보물 지도', emoji: '🗺️', category: 'accessory', price: 0, effects: { bond: 5 }, description: '탐험에서 발견!' },
+  { id: 'crystal', name: '수정 구슬', emoji: '🔮', category: 'accessory', price: 0, effects: { happiness: 10, bond: 3 }, description: '동굴에서 발견!' },
+  { id: 'seashell', name: '소라 껍데기', emoji: '🐚', category: 'accessory', price: 0, effects: { happiness: 8 }, description: '바닷가에서 주워온!' },
+  { id: 'feather', name: '황금 깃털', emoji: '🪶', category: 'accessory', price: 0, effects: { bond: 8 }, description: '산에서 발견!' },
+
   // === Room Theme (방 테마) ===
   { id: 'theme-cafe', name: '카페', emoji: '☕', category: 'room-theme', price: 200, effects: { happiness: 5 }, description: '아늑한 카페 분위기' },
   { id: 'theme-space', name: '우주', emoji: '🚀', category: 'room-theme', price: 300, effects: { happiness: 8 }, description: '신비로운 우주 배경' },

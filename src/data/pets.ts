@@ -111,6 +111,28 @@ export const PETS: Record<PetType, PetDef> = {
 
 export const PET_TYPES: PetType[] = ['dog', 'cat', 'bird', 'pig', 'reptile'];
 
+// === Pet Synergies ===
+
+export interface PetSynergy {
+  types: PetType[];
+  name: string;
+  emoji: string;
+  bonus: string;
+}
+
+export const PET_SYNERGIES: PetSynergy[] = [
+  { types: ['dog', 'cat'], name: '으르렁 친구', emoji: '🐾', bonus: 'happiness +5% 상시' },
+  { types: ['bird', 'reptile'], name: '하늘과 땅', emoji: '🌍', bonus: 'bond +10% 상시' },
+  { types: ['pig', 'dog'], name: '먹방 콤비', emoji: '🍽️', bonus: 'hunger decay -20%' },
+  { types: ['cat', 'bird'], name: '사냥 본능', emoji: '🎯', bonus: 'energy +5% 상시' },
+  { types: ['dog', 'cat', 'bird'], name: '동물농장', emoji: '🏡', bonus: '전체 +10%' },
+];
+
+/** 현재 보유 펫 타입 목록에서 활성 시너지 필터 */
+export function getActiveSynergies(petTypes: PetType[]): PetSynergy[] {
+  return PET_SYNERGIES.filter(s => s.types.every(t => petTypes.includes(t)));
+}
+
 /** 유대감 수치로 현재 성장 단계 계산 */
 export function getGrowthStage(petType: PetType, bond: number): GrowthStage {
   const thresholds = PETS[petType].evolutionThresholds;

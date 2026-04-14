@@ -7,6 +7,8 @@ export interface ExpeditionReward {
   value: number;
   chance: number;
   label: string;
+  /** item 타입일 때 아이템 ID */
+  itemId?: string;
 }
 
 export interface ExpeditionDef {
@@ -45,6 +47,7 @@ export const EXPEDITIONS: ExpeditionDef[] = [
       { type: 'gold', value: 60, chance: 1.0, label: '60G' },
       { type: 'bond', value: 5, chance: 0.6, label: '유대감+5' },
       { type: 'gold', value: 150, chance: 0.1, label: '보물 150G!' },
+      { type: 'item', value: 0, chance: 0.1, label: '🪶 황금 깃털', itemId: 'feather' },
     ],
     bonusPersonality: 'gentle',
   },
@@ -54,6 +57,7 @@ export const EXPEDITIONS: ExpeditionDef[] = [
       { type: 'gold', value: 70, chance: 1.0, label: '70G' },
       { type: 'bond', value: 4, chance: 0.5, label: '유대감+4' },
       { type: 'gold', value: 200, chance: 0.08, label: '진주 200G!' },
+      { type: 'item', value: 0, chance: 0.15, label: '🐚 소라 껍데기', itemId: 'seashell' },
     ],
     bonusPersonality: 'playful',
   },
@@ -63,6 +67,7 @@ export const EXPEDITIONS: ExpeditionDef[] = [
       { type: 'gold', value: 120, chance: 1.0, label: '120G' },
       { type: 'bond', value: 8, chance: 0.7, label: '유대감+8' },
       { type: 'gold', value: 300, chance: 0.1, label: '전설의 보물 300G!' },
+      { type: 'item', value: 0, chance: 0.08, label: '🗺️ 보물 지도', itemId: 'treasure-map' },
     ],
     requiresAdult: true,
     bonusPersonality: 'active',
@@ -73,22 +78,36 @@ export const EXPEDITIONS: ExpeditionDef[] = [
       { type: 'gold', value: 100, chance: 1.0, label: '100G' },
       { type: 'bond', value: 10, chance: 0.5, label: '유대감+10' },
       { type: 'gold', value: 500, chance: 0.05, label: '전설 보물 500G!!' },
+      { type: 'item', value: 0, chance: 0.05, label: '🔮 수정 구슬', itemId: 'crystal' },
     ],
     requiresAdult: true,
     bonusPersonality: 'sleepy',
   },
 ];
 
+/** 탐험 보상 롤 결과 */
+export interface ExpeditionRollResult {
+  label: string;
+  type: string;
+  value: number;
+  itemId?: string;
+}
+
 /** 탐험 보상 롤 */
 export function rollExpeditionRewards(
   expedition: ExpeditionDef,
   personalityMatch: boolean,
-): Array<{ label: string; type: string; value: number }> {
-  const results: Array<{ label: string; type: string; value: number }> = [];
+): ExpeditionRollResult[] {
+  const results: ExpeditionRollResult[] = [];
   for (const reward of expedition.rewards) {
     const chance = personalityMatch ? Math.min(1, reward.chance * 1.5) : reward.chance;
     if (Math.random() < chance) {
-      results.push({ label: reward.label, type: reward.type, value: reward.value });
+      results.push({
+        label: reward.label,
+        type: reward.type,
+        value: reward.value,
+        itemId: reward.itemId,
+      });
     }
   }
   return results;

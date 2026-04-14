@@ -6,7 +6,8 @@ import type { Scene } from './SceneManager';
 import type { AppContext } from '../app/AppContext';
 import type { PetPalState, PetStats, PetData } from '../data/state';
 import type { SceneManager } from './SceneManager';
-import { PETS, getGrowthStage } from '../data/pets';
+import { PETS, getGrowthStage, getActiveSynergies } from '../data/pets';
+import type { GrowthStage, PetType } from '../data/pets';
 import {
   getActivePet, getActiveStats, applyEffectsToPet,
   decayAllPets, overallMood, moodEmoji,
@@ -76,6 +77,13 @@ export class HomeScene implements Scene {
     // 탐험 귀환 체크
     this.processExpeditionReturns();
 
+    // 가구 효과 안내 (접속 시 1회)
+    if (this.ctx.state.current.ownedFurniture.length > 0) {
+      const count = this.ctx.state.current.ownedFurniture.length;
+      const pct = count >= 3 ? 30 : count >= 2 ? 20 : 10;
+      setTimeout(() => showToast(`🏠 가구 효과로 스탯 감소가 ${pct}% 줄었어요!`), 1500);
+    }
+
     this.ctx.save.save(this.ctx.state.current);
 
     const state = this.ctx.state.current;
@@ -100,6 +108,7 @@ export class HomeScene implements Scene {
           <div class="home-gold"><span class="gold-icon">💰</span><span id="gold-amount">${state.gold}</span>G</div>
           <div class="pet-tabs" id="pet-tabs">${this.renderPetTabs(state)}</div>
           ${this.renderWeeklyBadge(state)}
+          <div id="synergy-badges">${this.renderSynergyBadges(state)}</div>
           <div class="home-mood" id="mood-display">${moodEmoji(activePet.stats)}</div>
           <button class="btn-icon" id="btn-achievements">🏆</button>
         </div>
@@ -439,13 +448,16 @@ export class HomeScene implements Scene {
         return;
     }
 
-    this.checkEvolution(prevBond);
+    this.checkEvolution(prevBond, root);
     this.checkAchievements();
 
     // 럭키 드롭 (돌봄 액션 후 10% 확률)
     if (['feed', 'play', 'walk', 'clean', 'talk'].includes(action)) {
       this.processLuckyDrop();
     }
+
+    // 데일리 자동 수령
+    this.tryAutoClaimDaily();
 
     this.ctx.save.save(this.ctx.state.current);
     this.refreshUI(root);
@@ -524,7 +536,7 @@ export class HomeScene implements Scene {
     }, delay);
   }
 
-  private checkEvolution(prevBond: number): void {
+  private checkEvolution(prevBond: number, root: HTMLElement): void {
     const pet = getActivePet(this.ctx.state.current);
     if (!pet) return;
 
@@ -533,11 +545,142 @@ export class HomeScene implements Scene {
     if (prevStage !== newStage) {
       const petDef = PETS[pet.type];
       const info = petDef.stages[newStage];
-      showToast(`${pet.name}이(가) ${info.name}(으)로 성장했어요!`);
       this.ctx.sound.playLevelUp();
       this.petCanvas?.updatePet(newStage, info.size);
       this.petCanvas?.emitParticles('star', 12);
+      this.showEvolutionCutscene(pet.name, prevStage, newStage, pet.type, root);
     }
+  }
+
+  /** 진화 연출 (2초 전체화면 오버레이) */
+  private showEvolutionCutscene(
+    petName: string,
+    prevStage: GrowthStage,
+    newStage: GrowthStage,
+    petType: PetType,
+    root: HTMLElement,
+  ): void {
+    const overlay = document.createElement('div');
+    overlay.className = 'evolution-overlay';
+    overlay.innerHTML = `
+      <canvas id="evolution-canvas" width="600" height="600" style="width:300px;height:300px"></canvas>
+      <div class="evolution-text">
+        <div class="evolution-congrats">🎉 축하합니다! 🎉</div>
+        <div class="evolution-desc">${petName}이(가) ${PETS[petType].stages[newStage].name}(으)로 진화했어요!</div>
+      </div>
+    `;
+    root.appendChild(overlay);
+
+    const canvas = overlay.querySelector('#evolution-canvas') as HTMLCanvasElement;
+    const ctx2d = canvas.getContext('2d');
+    if (!ctx2d) { overlay.remove(); return; }
+    ctx2d.scale(2, 2);
+
+    const prevInfo = PETS[petType].stages[prevStage];
+    const newInfo = PETS[petType].stages[newStage];
+    const cx = 150;
+    const cy = 150;
+    let progress = 0;
+    const startTime = performance.now();
+    const duration = 2000;
+
+    const animate = (now: number): void => {
+      progress = Math.min(1, (now - startTime) / duration);
+      ctx2d.clearRect(0, 0, 300, 300);
+
+      // 어두운 배경
+      ctx2d.fillStyle = `rgba(0,0,0,${0.6 + 0.2 * Math.sin(progress * Math.PI)})`;
+      ctx2d.fillRect(0, 0, 300, 300);
+
+      // 빛 효과 (중앙에서 퍼지는 원)
+      const lightRadius = 30 + progress * 120;
+      const lightAlpha = 0.3 + 0.5 * Math.sin(progress * Math.PI);
+      const grad = ctx2d.createRadialGradient(cx, cy, 0, cx, cy, lightRadius);
+      grad.addColorStop(0, `rgba(255,255,200,${lightAlpha})`);
+      grad.addColorStop(0.5, `rgba(255,220,100,${lightAlpha * 0.5})`);
+      grad.addColorStop(1, 'rgba(255,220,100,0)');
+      ctx2d.fillStyle = grad;
+      ctx2d.fillRect(0, 0, 300, 300);
+
+      // 전환: 전반부 = 이전 모습(fade out), 후반부 = 새 모습(fade in)
+      const anim = createAnimState();
+      anim.emotion = 'happy';
+
+      if (progress < 0.5) {
+        // 이전 모습 (fade out + 떨림)
+        const fadeOut = 1 - progress * 2;
+        ctx2d.globalAlpha = fadeOut;
+        const shake = Math.sin(progress * 40) * 3;
+        drawPet(ctx2d, petType, prevStage, anim, cx + shake, cy, prevInfo.size * 1.2, undefined);
+        ctx2d.globalAlpha = 1;
+      } else {
+        // 새 모습 (fade in + 확대)
+        const fadeIn = (progress - 0.5) * 2;
+        const scale = 0.5 + fadeIn * 0.5;
+        ctx2d.globalAlpha = fadeIn;
+        ctx2d.save();
+        ctx2d.translate(cx, cy);
+        ctx2d.scale(scale, scale);
+        drawPet(ctx2d, petType, newStage, anim, 0, 0, newInfo.size * 1.2, undefined);
+        ctx2d.restore();
+        ctx2d.globalAlpha = 1;
+      }
+
+      // 파티클 별
+      if (progress > 0.4) {
+        const pCount = Math.floor((progress - 0.4) * 20);
+        ctx2d.fillStyle = '#FFD700';
+        for (let i = 0; i < pCount; i++) {
+          const angle = (i / pCount) * Math.PI * 2 + progress * 3;
+          const dist = 60 + Math.sin(progress * 6 + i) * 30;
+          const sx = cx + Math.cos(angle) * dist;
+          const sy = cy + Math.sin(angle) * dist;
+          ctx2d.beginPath();
+          ctx2d.arc(sx, sy, 2 + Math.random() * 3, 0, Math.PI * 2);
+          ctx2d.fill();
+        }
+      }
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        // 2초 후 자동 닫힘
+        setTimeout(() => overlay.remove(), 200);
+      }
+    };
+
+    requestAnimationFrame(animate);
+
+    // 클릭으로도 닫기 가능
+    overlay.addEventListener('click', () => overlay.remove());
+  }
+
+  /** 데일리 태스크 전체 완료 시 자동 수령 */
+  private tryAutoClaimDaily(): void {
+    const state = this.ctx.state.current;
+    if (state.dailyTasksClaimed) return;
+    if (!allDailyTasksDone(state)) return;
+
+    const reward = getDailyRewardTotal(state);
+    this.ctx.state.current = {
+      ...state,
+      gold: state.gold + reward,
+      totalGoldEarned: state.totalGoldEarned + reward,
+      dailyTasksClaimed: true,
+    };
+    this.ctx.sound.playCoin();
+    showToast(`데일리 자동 완료! +${reward}G 🎉`);
+    this.petCanvas?.emitParticles('star', 8);
+  }
+
+  /** 활성 시너지 배지 렌더 */
+  private renderSynergyBadges(state: PetPalState): string {
+    const petTypes = state.pets.map(p => p.type);
+    const synergies = getActiveSynergies(petTypes);
+    if (synergies.length === 0) return '';
+    return synergies.map(s =>
+      `<span class="synergy-badge" title="${s.bonus}">${s.emoji} ${s.name}</span>`
+    ).join('');
   }
 
   private checkAchievements(): void {
@@ -814,6 +957,10 @@ export class HomeScene implements Scene {
     const expEl = root.querySelector('#expedition-indicator');
     if (expEl) expEl.innerHTML = this.renderExpeditionIndicator(state);
 
+    // Synergy badges 갱신
+    const synergyEl = root.querySelector('#synergy-badges');
+    if (synergyEl) synergyEl.innerHTML = this.renderSynergyBadges(state);
+
     // Canvas 동기화
     this.petCanvas?.setPets(state.pets);
     this.petCanvas?.setActivePet(state.activePetIndex);
@@ -880,10 +1027,12 @@ export class HomeScene implements Scene {
         let goldTotal = 0;
         let bondTotal = 0;
         const rewardLabels: string[] = [];
+        const itemIds: string[] = [];
 
         for (const r of rewards) {
           if (r.type === 'gold') goldTotal += r.value;
           else if (r.type === 'bond') bondTotal += r.value;
+          else if (r.type === 'item' && r.itemId) itemIds.push(r.itemId);
           rewardLabels.push(r.label);
         }
 
@@ -895,6 +1044,16 @@ export class HomeScene implements Scene {
           p.stats = { ...p.stats, bond: p.stats.bond + bondTotal };
           pets[exp.petIndex] = p;
           this.ctx.state.current.pets = pets;
+        }
+        // 아이템 보상 추가
+        if (itemIds.length > 0) {
+          const owned = [...this.ctx.state.current.ownedItems];
+          for (const itemId of itemIds) {
+            if (!owned.includes(itemId)) {
+              owned.push(itemId);
+            }
+          }
+          this.ctx.state.current.ownedItems = owned;
         }
 
         const matchBonus = personalityMatch ? ' (성격 보너스!)' : '';
