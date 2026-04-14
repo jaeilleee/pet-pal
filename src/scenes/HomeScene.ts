@@ -13,8 +13,12 @@ import {
   checkSickness, healPet, checkRunawayWarning,
 } from '../data/state';
 import { getItemById } from '../data/items';
-import { processLogin, updateDailyProgress, allDailyTasksDone, getDailyRewardTotal } from '../data/daily';
+import {
+  processLogin, updateDailyProgress, allDailyTasksDone, getDailyRewardTotal,
+  processWeeklyReset, updateWeeklyScore, getWeeklyTierEmoji,
+} from '../data/daily';
 import { getTimeOfDay, getTimeBackground } from '../data/time-guard';
+import { EXPEDITIONS, rollExpeditionRewards } from '../data/expeditions';
 import { COLORS } from '../data/design-tokens';
 import { showToast } from '../ui/Toast';
 import { PetCanvas } from '../game/PetCanvas';
@@ -58,6 +62,7 @@ export class HomeScene implements Scene {
 
   mount(root: HTMLElement): void {
     this.processLoginRewards();
+    this.processWeeklyRewards();
 
     // 스탯 감소 + 업적 체크
     this.ctx.state.current = decayAllPets(this.ctx.state.current);
@@ -65,6 +70,9 @@ export class HomeScene implements Scene {
 
     // 질병 체크 (접속 시)
     this.processSicknessCheck();
+
+    // 탐험 귀환 체크
+    this.processExpeditionReturns();
 
     this.ctx.save.save(this.ctx.state.current);
 
@@ -89,11 +97,13 @@ export class HomeScene implements Scene {
         <div class="home-header">
           <div class="home-gold"><span class="gold-icon">💰</span><span id="gold-amount">${state.gold}</span>G</div>
           <div class="pet-tabs" id="pet-tabs">${this.renderPetTabs(state)}</div>
+          ${this.renderWeeklyBadge(state)}
           <div class="home-mood" id="mood-display">${moodEmoji(activePet.stats)}</div>
           <button class="btn-icon" id="btn-achievements">🏆</button>
         </div>
 
         <div class="home-pet-area" id="pet-container"></div>
+        <div id="expedition-indicator">${this.renderExpeditionIndicator(state)}</div>
 
         <div class="pet-name-display">
           <span class="pet-name-label" id="pet-name-label">${activePet.name}</span>
@@ -116,8 +126,10 @@ export class HomeScene implements Scene {
           <button class="action-btn" data-action="clean"><span>🛁</span>씻기</button>
           <button class="action-btn" data-action="talk"><span>💬</span>대화</button>
           ${activePet.isSick ? '<button class="action-btn action-btn-heal" data-action="heal"><span>💊</span>치료 50G</button>' : ''}
+          <button class="action-btn" data-action="expedition"><span>🗺️</span>탐험</button>
           <button class="action-btn" data-action="shop"><span>🛍️</span>상점</button>
           <button class="action-btn" data-action="minigame"><span>🎮</span>게임</button>
+          <button class="action-btn" data-action="photo"><span>📸</span>사진</button>
           <button class="action-btn" data-action="profile"><span>📋</span>프로필</button>
         </div>
 
@@ -130,6 +142,9 @@ export class HomeScene implements Scene {
     this.petCanvas = new PetCanvas(container);
     this.petCanvas.setPets(state.pets);
     this.petCanvas.setActivePet(state.activePetIndex);
+    // 탐험 중인 펫 숨기기
+    const expPetIndices = state.expeditions.map(e => e.petIndex);
+    this.petCanvas.setExpeditionPets(expPetIndices);
     if (isSleeping) this.petCanvas.setEmotion('sleeping');
     this.petCanvas.setFurniture(state.ownedFurniture.map(id => getItemById(id)?.emoji ?? ''));
     if (activePet.equippedAccessory) {
@@ -390,6 +405,9 @@ export class HomeScene implements Scene {
         this.ctx.sound.playLevelUp();
         break;
       }
+      case 'expedition':
+        this.showExpeditionPicker(root);
+        return;
       case 'shop':
         import('./ShopScene')
           .then(m => this.ctx.scenes.switchTo(() => new m.ShopScene(this.ctx)))
@@ -397,6 +415,9 @@ export class HomeScene implements Scene {
         return;
       case 'minigame':
         this.showMiniGamePicker(root);
+        return;
+      case 'photo':
+        this.enterPhotoMode(root);
         return;
       case 'profile':
         import('./ProfileScene')
@@ -741,12 +762,306 @@ export class HomeScene implements Scene {
     const tabsEl = root.querySelector('#pet-tabs');
     if (tabsEl) tabsEl.innerHTML = this.renderPetTabs(state);
 
+    // Expedition indicator 갱신
+    const expEl = root.querySelector('#expedition-indicator');
+    if (expEl) expEl.innerHTML = this.renderExpeditionIndicator(state);
+
     // Canvas 동기화
     this.petCanvas?.setPets(state.pets);
     this.petCanvas?.setActivePet(state.activePetIndex);
     this.petCanvas?.setStats(pet.stats);
 
     this.updateJealousyAlert(root);
+  }
+
+  // === Weekly Tournament ===
+
+  private processWeeklyRewards(): void {
+    const result = processWeeklyReset(this.ctx.state.current);
+    this.ctx.state.current = result.state;
+    if (result.reward > 0) {
+      const emoji = getWeeklyTierEmoji(result.prevTier);
+      showToast(`${emoji} 지난주 ${result.prevTier} 티어 보상: +${result.reward}G`);
+    }
+  }
+
+  private renderWeeklyBadge(state: PetPalState): string {
+    if (state.weeklyTier === 'none' && state.weeklyBestScore === 0) return '';
+    const emoji = getWeeklyTierEmoji(state.weeklyTier);
+    const tierLabel = state.weeklyTier === 'none' ? '' : state.weeklyTier.toUpperCase();
+    return `<div class="weekly-badge" id="weekly-badge" title="이번 주 최고: ${state.weeklyBestScore}점">
+      ${emoji || '🏅'} <span class="weekly-score">${state.weeklyBestScore}</span> ${tierLabel}
+    </div>`;
+  }
+
+  // === Expedition System ===
+
+  private renderExpeditionIndicator(state: PetPalState): string {
+    if (state.expeditions.length === 0) return '';
+    return state.expeditions.map(exp => {
+      const pet = state.pets[exp.petIndex];
+      if (!pet) return '';
+      const expDef = EXPEDITIONS.find(e => e.id === exp.expeditionId);
+      if (!expDef) return '';
+      const remaining = (exp.startedAt + exp.durationMs) - Date.now();
+      if (remaining <= 0) return '';
+      const mins = Math.ceil(remaining / 60000);
+      const label = mins >= 60 ? `${Math.floor(mins / 60)}시간 ${mins % 60}분` : `${mins}분`;
+      return `<div class="expedition-status">🗺️ ${pet.name} → ${expDef.emoji} ${expDef.name} (${label} 남음)</div>`;
+    }).join('');
+  }
+
+  private processExpeditionReturns(): void {
+    const state = this.ctx.state.current;
+    const now = Date.now();
+    const remaining: typeof state.expeditions = [];
+    let changed = false;
+
+    for (const exp of state.expeditions) {
+      if (now >= exp.startedAt + exp.durationMs) {
+        // 귀환!
+        changed = true;
+        const pet = state.pets[exp.petIndex];
+        const expDef = EXPEDITIONS.find(e => e.id === exp.expeditionId);
+        if (!pet || !expDef) continue;
+
+        const personalityMatch = expDef.bonusPersonality === pet.personality;
+        const rewards = rollExpeditionRewards(expDef, personalityMatch);
+
+        let goldTotal = 0;
+        let bondTotal = 0;
+        const rewardLabels: string[] = [];
+
+        for (const r of rewards) {
+          if (r.type === 'gold') goldTotal += r.value;
+          else if (r.type === 'bond') bondTotal += r.value;
+          rewardLabels.push(r.label);
+        }
+
+        this.ctx.state.current.gold += goldTotal;
+        this.ctx.state.current.totalGoldEarned += goldTotal;
+        if (bondTotal > 0) {
+          const pets = [...this.ctx.state.current.pets];
+          const p = { ...pets[exp.petIndex] };
+          p.stats = { ...p.stats, bond: p.stats.bond + bondTotal };
+          pets[exp.petIndex] = p;
+          this.ctx.state.current.pets = pets;
+        }
+
+        const matchBonus = personalityMatch ? ' (성격 보너스!)' : '';
+        showToast(`${expDef.emoji} ${pet.name} 탐험 귀환! ${rewardLabels.join(', ')}${matchBonus}`);
+      } else {
+        remaining.push(exp);
+      }
+    }
+
+    if (changed) {
+      this.ctx.state.current = { ...this.ctx.state.current, expeditions: remaining };
+      this.ctx.save.save(this.ctx.state.current);
+    }
+  }
+
+  private showExpeditionPicker(root: HTMLElement): void {
+    const state = this.ctx.state.current;
+    const activePet = getActivePet(state);
+    if (!activePet) return;
+
+    // 이미 탐험 중인지 체크
+    const isOnExpedition = state.expeditions.some(e => e.petIndex === state.activePetIndex);
+    if (isOnExpedition) {
+      showToast('이 펫은 이미 탐험 중이에요!');
+      return;
+    }
+
+    const stage = getGrowthStage(activePet.type, activePet.stats.bond);
+    const isAdult = stage === 'adult';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'mg-picker-overlay';
+    overlay.innerHTML = `
+      <div class="expedition-picker">
+        <h3>🗺️ 탐험 보내기</h3>
+        <p class="expedition-pet-label">${activePet.name} 파견</p>
+        <div class="expedition-list">
+          ${EXPEDITIONS.map(exp => {
+            const locked = exp.requiresAdult && !isAdult;
+            const matchBonus = exp.bonusPersonality === activePet.personality;
+            return `<button class="expedition-item ${locked ? 'locked' : ''}"
+                            data-exp-id="${exp.id}" ${locked ? 'disabled' : ''}>
+              <span class="exp-emoji">${exp.emoji}</span>
+              <div class="exp-info">
+                <span class="exp-name">${exp.name}</span>
+                <span class="exp-duration">${exp.durationHours}시간</span>
+                ${matchBonus ? '<span class="exp-bonus">✨ 성격 보너스</span>' : ''}
+              </div>
+              ${locked ? '<span class="exp-lock">🔒 성체 전용</span>' : ''}
+            </button>`;
+          }).join('')}
+        </div>
+        <button class="mg-pick-btn mg-close">취소</button>
+      </div>
+    `;
+    root.appendChild(overlay);
+
+    // 이벤트 위임
+    const handler = (e: Event): void => {
+      const target = (e.target as HTMLElement).closest('[data-exp-id]') as HTMLElement | null;
+      if (target && !target.hasAttribute('disabled')) {
+        const expId = target.dataset.expId!;
+        this.startExpedition(expId, root);
+        overlay.remove();
+        return;
+      }
+      if ((e.target as HTMLElement).closest('.mg-close')) {
+        overlay.remove();
+      }
+    };
+    overlay.addEventListener('click', handler);
+  }
+
+  private startExpedition(expeditionId: string, root: HTMLElement): void {
+    const expDef = EXPEDITIONS.find(e => e.id === expeditionId);
+    if (!expDef) return;
+
+    const state = this.ctx.state.current;
+    const idx = state.activePetIndex;
+    const pet = state.pets[idx];
+    if (!pet) return;
+
+    const expedition = {
+      petIndex: idx,
+      expeditionId,
+      startedAt: Date.now(),
+      durationMs: expDef.durationHours * 60 * 60 * 1000,
+    };
+
+    this.ctx.state.current = {
+      ...state,
+      expeditions: [...state.expeditions, expedition],
+    };
+    this.ctx.save.save(this.ctx.state.current);
+
+    // Canvas에서 펫 숨기기
+    const expIndices = this.ctx.state.current.expeditions.map(e => e.petIndex);
+    this.petCanvas?.setExpeditionPets(expIndices);
+
+    showToast(`${expDef.emoji} ${pet.name}이(가) ${expDef.name}으로 탐험을 떠났어요!`);
+    this.ctx.sound.playMerge();
+    this.refreshUI(root);
+  }
+
+  // === Photo Mode ===
+
+  private enterPhotoMode(root: HTMLElement): void {
+    if (!this.petCanvas) return;
+
+    // UI 숨기기
+    const uiElements = root.querySelectorAll(
+      '.home-header, .pet-name-display, .stat-bars, .bond-bar, .action-grid, .daily-strip, #jealousy-alert, #expedition-indicator, .ad-banner-slot',
+    );
+    uiElements.forEach(el => (el as HTMLElement).style.display = 'none');
+
+    // 포토 모드 UI
+    const photoUI = document.createElement('div');
+    photoUI.className = 'photo-mode-ui';
+    photoUI.id = 'photo-mode-ui';
+    photoUI.innerHTML = `
+      <div class="photo-pose-selector">
+        <button class="photo-pose-btn" data-pose="happy">😊 행복</button>
+        <button class="photo-pose-btn" data-pose="love">😍 사랑</button>
+        <button class="photo-pose-btn" data-pose="sleeping">😴 잠자기</button>
+      </div>
+      <div class="photo-actions">
+        <button class="photo-capture-btn" id="btn-capture">📸 찰칵!</button>
+        <button class="photo-exit-btn" id="btn-photo-exit">✕ 나가기</button>
+      </div>
+    `;
+    root.appendChild(photoUI);
+
+    // 포즈 선택
+    photoUI.addEventListener('click', (e) => {
+      const poseBtn = (e.target as HTMLElement).closest('[data-pose]') as HTMLElement | null;
+      if (poseBtn) {
+        const pose = poseBtn.dataset.pose as 'happy' | 'love' | 'sleeping';
+        this.petCanvas?.setPhotoPose(pose);
+        this.ctx.sound.playClick();
+        return;
+      }
+
+      // 촬영
+      if ((e.target as HTMLElement).closest('#btn-capture')) {
+        this.captureAndShare();
+        return;
+      }
+
+      // 나가기
+      if ((e.target as HTMLElement).closest('#btn-photo-exit')) {
+        this.exitPhotoMode(root, photoUI, uiElements);
+      }
+    });
+  }
+
+  private exitPhotoMode(
+    root: HTMLElement,
+    photoUI: HTMLElement,
+    uiElements: NodeListOf<Element>,
+  ): void {
+    photoUI.remove();
+    uiElements.forEach(el => (el as HTMLElement).style.display = '');
+    this.petCanvas?.setEmotion('neutral');
+    this.ctx.sound.playClick();
+  }
+
+  private captureAndShare(): void {
+    if (!this.petCanvas) return;
+
+    // 플래시 효과
+    this.petCanvas.flashEffect();
+    this.ctx.sound.playLucky();
+
+    // 약간의 딜레이 후 캡처 (플래시가 지나간 후)
+    setTimeout(() => {
+      if (!this.petCanvas) return;
+      const dataUrl = this.petCanvas.capturePhoto();
+
+      // Web Share API 시도
+      if (navigator.share && navigator.canShare) {
+        fetch(dataUrl)
+          .then(res => res.blob())
+          .then(blob => {
+            const file = new File([blob], 'petpal-photo.png', { type: 'image/png' });
+            if (navigator.canShare({ files: [file] })) {
+              navigator.share({
+                title: 'PetPal 사진',
+                text: '내 펫을 봐주세요!',
+                files: [file],
+              }).catch(err => {
+                if (err instanceof Error && err.name !== 'AbortError') {
+                  console.error('[Photo] Share failed', err);
+                  this.downloadPhoto(dataUrl);
+                }
+              });
+            } else {
+              this.downloadPhoto(dataUrl);
+            }
+          })
+          .catch(err => {
+            console.error('[Photo] Blob conversion failed', err);
+            this.downloadPhoto(dataUrl);
+          });
+      } else {
+        this.downloadPhoto(dataUrl);
+      }
+
+      showToast('📸 사진을 찍었어요!');
+    }, 150);
+  }
+
+  private downloadPhoto(dataUrl: string): void {
+    const link = document.createElement('a');
+    link.download = `petpal-${Date.now()}.png`;
+    link.href = dataUrl;
+    link.click();
   }
 
   private startAutoSave(): void {

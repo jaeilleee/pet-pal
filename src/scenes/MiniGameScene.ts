@@ -9,6 +9,7 @@ import type { PetPalState } from '../data/state';
 import type { SceneManager } from './SceneManager';
 import { COLORS } from '../data/design-tokens';
 import { applyEffectsToPet } from '../data/state';
+import { updateWeeklyScore } from '../data/daily';
 import { showToast } from '../ui/Toast';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
@@ -236,6 +237,8 @@ export class MiniGameScene implements Scene {
     state.gold += goldReward;
     state.totalGoldEarned += goldReward;
     state = applyEffectsToPet(state, state.activePetIndex, { happiness: 10, bond: 2 });
+    // 주간 토너먼트 점수 갱신
+    state = updateWeeklyScore(state, this.score);
     this.ctx.state.current = state;
     this.ctx.save.save(state);
 

@@ -9,6 +9,7 @@ import type { PetPalState } from '../data/state';
 import type { SceneManager } from './SceneManager';
 import { PETS, getGrowthStage } from '../data/pets';
 import { getActivePet, applyEffectsToPet } from '../data/state';
+import { updateWeeklyScore } from '../data/daily';
 import { drawPet, createAnimState, updateAnimState } from '../game/PetRenderer';
 import { showToast } from '../ui/Toast';
 
@@ -275,6 +276,8 @@ export class WalkGameScene implements Scene {
     state.gold += goldReward;
     state.totalGoldEarned += goldReward;
     state = applyEffectsToPet(state, state.activePetIndex, { happiness: 15, bond: 3 });
+    // 주간 토너먼트 점수 갱신
+    state = updateWeeklyScore(state, this.score);
     this.ctx.state.current = state;
     this.ctx.save.save(state);
 

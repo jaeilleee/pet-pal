@@ -70,6 +70,7 @@ export class PetCanvas {
   private visitorEmoji: string | null = null;
   private visitorBounceTime = 0;
   private tearTimer = 0;
+  private expeditionPetIndices: number[] = [];
 
   constructor(container: HTMLElement) {
     this.particles = new ParticleSystem();
@@ -306,6 +307,33 @@ export class PetCanvas {
     return this.canvas;
   }
 
+  /** 사진 캡처: 현재 프레임을 고해상도 PNG로 반환 */
+  capturePhoto(): string {
+    return this.canvas.toDataURL('image/png');
+  }
+
+  /** 포토 모드용 포즈 설정 */
+  setPhotoPose(pose: 'happy' | 'love' | 'sleeping'): void {
+    const pet = this.pets[this.activePetIndex];
+    if (!pet) return;
+    this.setPetEmotion(pet, pose === 'love' ? 'love' : pose === 'sleeping' ? 'sleeping' : 'happy');
+  }
+
+  /** 플래시 효과 */
+  flashEffect(): void {
+    const c = this.ctx;
+    c.save();
+    c.fillStyle = 'rgba(255,255,255,0.8)';
+    c.fillRect(0, 0, this.W, this.H);
+    c.restore();
+    // 0.2초 후 자동 해제 (다음 프레임에서 덮어씌워짐)
+  }
+
+  /** 탐험 중인 펫 인덱스 목록 설정 */
+  setExpeditionPets(indices: number[]): void {
+    this.expeditionPetIndices = indices;
+  }
+
   /** 방문자 이모지 설정 (null이면 숨김) */
   setVisitor(emoji: string | null): void {
     this.visitorEmoji = emoji;
@@ -521,9 +549,10 @@ export class PetCanvas {
     this.drawFloor(c);
     this.drawFurniture(c);
 
-    // 모든 펫 렌더 (y 순서로 정렬해서 깊이감)
+    // 모든 펫 렌더 (y 순서로 정렬해서 깊이감, 탐험 중 펫 제외)
     const sorted = this.pets
       .map((pet, i) => ({ pet, index: i }))
+      .filter(({ index }) => !this.expeditionPetIndices.includes(index))
       .sort((a, b) => a.pet.y - b.pet.y);
 
     for (const { pet, index } of sorted) {
@@ -710,9 +739,85 @@ export class PetCanvas {
     c.fillStyle = lightGrad;
     c.fillRect(0, 0, this.W, this.H);
 
+    // 계절 데코레이션
+    this.drawSeasonDecor(c, timeOfDay);
+
     this.drawWindow(c, timeOfDay);
     this.drawWallClock(c, timeOfDay);
     this.drawWallPicture(c);
+  }
+
+  /** 계절별 배경 장식 */
+  private drawSeasonDecor(c: CanvasRenderingContext2D, tod: string): void {
+    switch (this.season) {
+      case 'spring':
+        this.drawSpringDecor(c, tod);
+        break;
+      case 'summer':
+        this.drawSummerDecor(c, tod);
+        break;
+      case 'autumn':
+        this.drawAutumnDecor(c, tod);
+        break;
+      case 'winter':
+        this.drawWinterDecor(c, tod);
+        break;
+    }
+  }
+
+  /** 봄: 벚꽃 나무 + 분홍 파티클 */
+  private drawSpringDecor(c: CanvasRenderingContext2D, _tod: string): void {
+    // 벚꽃 나무 (좌측 상단)
+    c.fillStyle = '#8B6F47';
+    c.fillRect(8, 25, 4, 40);
+    // 나뭇잎/꽃 원형
+    c.fillStyle = 'rgba(255,182,193,0.45)';
+    c.beginPath();
+    c.arc(10, 20, 16, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = 'rgba(255,105,180,0.3)';
+    c.beginPath();
+    c.arc(18, 16, 10, 0, Math.PI * 2);
+    c.fill();
+    c.beginPath();
+    c.arc(4, 24, 9, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  /** 여름: 선풍기 + 수박 조각 */
+  private drawSummerDecor(c: CanvasRenderingContext2D, _tod: string): void {
+    // 수박 조각 (바닥 왼쪽)
+    c.font = '16px Apple Color Emoji, Segoe UI Emoji';
+    c.textAlign = 'center';
+    c.fillText('🍉', 25, this.H * 0.72);
+    // 선풍기 (벽면)
+    c.font = '14px Apple Color Emoji, Segoe UI Emoji';
+    c.fillText('🌀', 12, 35);
+  }
+
+  /** 가을: 단풍 나뭇잎 + 따뜻한 톤 오버레이 */
+  private drawAutumnDecor(c: CanvasRenderingContext2D, _tod: string): void {
+    // 따뜻한 오버레이
+    c.fillStyle = 'rgba(255,140,0,0.04)';
+    c.fillRect(0, 0, this.W, this.H);
+    // 단풍 나뭇잎 (고정 위치)
+    c.font = '12px Apple Color Emoji, Segoe UI Emoji';
+    c.textAlign = 'center';
+    c.fillText('🍁', 15, 28);
+    c.fillText('🍂', this.W - 25, 45);
+  }
+
+  /** 겨울: 눈 쌓인 창문 + 히터 */
+  private drawWinterDecor(c: CanvasRenderingContext2D, _tod: string): void {
+    // 히터 불빛 (좌하단)
+    c.font = '14px Apple Color Emoji, Segoe UI Emoji';
+    c.textAlign = 'center';
+    c.fillText('🔥', 20, this.H * 0.7);
+    // 창문 위 눈 쌓임 효과 (drawWindow 전에 눈 라인)
+    c.fillStyle = 'rgba(255,255,255,0.6)';
+    c.beginPath();
+    this.roundRect(c, this.W - 82, 8, 59, 5, 2);
+    c.fill();
   }
 
   /** Wall clock showing current time */

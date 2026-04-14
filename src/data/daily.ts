@@ -126,3 +126,89 @@ export function allDailyTasksDone(state: PetPalState): boolean {
 export function getDailyRewardTotal(state: PetPalState): number {
   return state.dailyTasks.reduce((sum, t) => sum + t.reward, 0);
 }
+
+// === Weekly Tournament ===
+
+export type WeeklyTier = 'none' | 'bronze' | 'silver' | 'gold' | 'diamond';
+
+const WEEKLY_TIER_THRESHOLDS: Array<{ tier: WeeklyTier; minScore: number; reward: number }> = [
+  { tier: 'diamond', minScore: 400, reward: 800 },
+  { tier: 'gold', minScore: 200, reward: 300 },
+  { tier: 'silver', minScore: 100, reward: 150 },
+  { tier: 'bronze', minScore: 50, reward: 50 },
+];
+
+/** 현재 주의 월요일 ISO 날짜 */
+export function getCurrentWeekStartISO(): string {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const day = kst.getUTCDay();
+  const diff = day === 0 ? 6 : day - 1; // 월요일=0
+  kst.setUTCDate(kst.getUTCDate() - diff);
+  return kst.toISOString().slice(0, 10);
+}
+
+/** 점수로 티어 계산 */
+export function calcWeeklyTier(score: number): WeeklyTier {
+  for (const t of WEEKLY_TIER_THRESHOLDS) {
+    if (score >= t.minScore) return t.tier;
+  }
+  return 'none';
+}
+
+/** 티어 이모지 */
+export function getWeeklyTierEmoji(tier: WeeklyTier): string {
+  switch (tier) {
+    case 'diamond': return '💎';
+    case 'gold': return '🥇';
+    case 'silver': return '🥈';
+    case 'bronze': return '🥉';
+    default: return '';
+  }
+}
+
+/** 티어 보상 금액 */
+export function getWeeklyTierReward(tier: WeeklyTier): number {
+  const found = WEEKLY_TIER_THRESHOLDS.find(t => t.tier === tier);
+  return found?.reward ?? 0;
+}
+
+/** 주간 리셋 처리: 새 주가 시작되면 보상 지급 + 리셋 */
+export function processWeeklyReset(state: PetPalState): {
+  state: PetPalState;
+  reward: number;
+  prevTier: WeeklyTier;
+} {
+  const currentWeek = getCurrentWeekStartISO();
+  if (state.weeklyStartDate === currentWeek) {
+    return { state, reward: 0, prevTier: 'none' };
+  }
+
+  // 이전 주 보상 지급
+  const prevTier = state.weeklyTier;
+  const reward = getWeeklyTierReward(prevTier);
+
+  const newState: PetPalState = {
+    ...state,
+    weeklyBestScore: 0,
+    weeklyStartDate: currentWeek,
+    weeklyTier: 'none',
+    gold: state.gold + reward,
+    totalGoldEarned: state.totalGoldEarned + reward,
+  };
+
+  return { state: newState, reward, prevTier };
+}
+
+/** 미니게임 점수로 주간 최고 기록 갱신 */
+export function updateWeeklyScore(state: PetPalState, score: number): PetPalState {
+  const currentWeek = getCurrentWeekStartISO();
+  // 아직 이번 주 초기화가 안 되었으면 초기화
+  const weeklyStartDate = state.weeklyStartDate === currentWeek
+    ? state.weeklyStartDate : currentWeek;
+  const weeklyBestScore = state.weeklyStartDate === currentWeek
+    ? Math.max(state.weeklyBestScore, score) : score;
+  const weeklyTier = calcWeeklyTier(weeklyBestScore);
+
+  return { ...state, weeklyBestScore, weeklyStartDate, weeklyTier };
+}

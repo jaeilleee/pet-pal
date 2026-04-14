@@ -100,6 +100,20 @@ export interface PetPalState {
   visitorLog: string[];
   /** 현재 방문 중인 방문자 */
   currentVisitor: { id: string; arrivedAt: number } | null;
+
+  // === Expedition System ===
+  /** 탐험 중인 펫 정보 */
+  expeditions: Array<{
+    petIndex: number;
+    expeditionId: string;
+    startedAt: number;
+    durationMs: number;
+  }>;
+
+  // === Weekly Tournament ===
+  weeklyBestScore: number;
+  weeklyStartDate: string;  // ISO 주 시작일 (월요일)
+  weeklyTier: 'none' | 'bronze' | 'silver' | 'gold' | 'diamond';
 }
 
 export interface DiaryEntry {
@@ -169,6 +183,10 @@ export function createInitialState(): PetPalState {
     diaryEntries: [],
     visitorLog: [],
     currentVisitor: null,
+    expeditions: [],
+    weeklyBestScore: 0,
+    weeklyStartDate: '',
+    weeklyTier: 'none',
   };
 }
 
@@ -215,6 +233,12 @@ export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
     // visitor 시스템 마이그레이션
     if (!Array.isArray(base.visitorLog)) base.visitorLog = [];
     if (base.currentVisitor === undefined) base.currentVisitor = null;
+    // expedition 시스템 마이그레이션
+    if (!Array.isArray(base.expeditions)) base.expeditions = [];
+    // weekly tournament 마이그레이션
+    if (typeof base.weeklyBestScore !== 'number') base.weeklyBestScore = 0;
+    if (typeof base.weeklyStartDate !== 'string') base.weeklyStartDate = '';
+    if (!base.weeklyTier) base.weeklyTier = 'none';
     return base as PetPalState;
   }
 
