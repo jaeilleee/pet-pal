@@ -629,7 +629,16 @@ export class HomeScene implements Scene {
     const jealousPet = state.pets.find((p, i) => i !== state.activePetIndex && p.jealousy > 30);
     if (jealousPet) {
       alertEl.style.display = 'block';
-      alertEl.textContent = `${jealousPet.name}이(가) 질투하고 있어요!`;
+      const j = jealousPet.jealousy;
+      if (j > 80) {
+        alertEl.textContent = `😤 ${jealousPet.name}: "나는요?! 나도 놀아줘!!"`;
+      } else if (j > 60) {
+        alertEl.textContent = `😠 ${jealousPet.name}이(가) 삐졌어요...`;
+      } else if (j > 40) {
+        alertEl.textContent = `🥺 ${jealousPet.name}이(가) 부러워하고 있어요`;
+      } else {
+        alertEl.textContent = `👀 ${jealousPet.name}이(가) 슬쩍 쳐다보고 있어요`;
+      }
     } else {
       alertEl.style.display = 'none';
     }

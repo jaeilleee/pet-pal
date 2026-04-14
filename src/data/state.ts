@@ -287,8 +287,8 @@ export function decayAllPets(state: PetPalState): PetPalState {
       stats.bond = Math.max(0, stats.bond - 1);
     }
 
-    // 질투도 시간 경과로 감소
-    const jealousy = Math.max(0, pet.jealousy - decay * 2);
+    // 질투도 시간 경과로 빠르게 감소
+    const jealousy = Math.max(0, pet.jealousy - decay * 5);
     return { ...pet, stats, jealousy };
   });
 
@@ -352,17 +352,17 @@ export function applyEffectsToPet(
   }
   pet.stats = stats;
 
-  // 질투: 다른 펫들의 질투 증가
+  // 질투: 돌봄 받은 펫은 질투 감소, 나머지는 소폭 증가
   for (let i = 0; i < pets.length; i++) {
     if (i === petIndex) {
+      pet.jealousy = Math.max(0, pet.jealousy - 10);
       pets[i] = pet;
     } else {
       const other = { ...pets[i] };
-      other.jealousy = Math.min(100, other.jealousy + 8);
-      // 질투가 높으면 행복 감소
-      if (other.jealousy > 50) {
+      other.jealousy = Math.min(100, other.jealousy + 3);
+      if (other.jealousy > 60) {
         other.stats = { ...other.stats };
-        other.stats.happiness = Math.max(10, other.stats.happiness - 2);
+        other.stats.happiness = Math.max(10, other.stats.happiness - 1);
       }
       pets[i] = other;
     }
