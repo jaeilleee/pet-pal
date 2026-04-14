@@ -1121,65 +1121,133 @@
 .exp-lock { font-size: 11px; color: var(--text-light); }
 
 /* ===== Photo Mode ===== */
-.photo-mode-ui {
+.photo-overlay {
   position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 390px;
-  padding: 12px 16px;
-  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  z-index: 100;
-  background: linear-gradient(0deg, rgba(0,0,0,0.6) 0%, transparent 100%);
-}
-.photo-pose-selector {
+  inset: 0;
+  background: #1a1a2e;
+  z-index: 200;
   display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  flex-direction: column;
+  align-items: center;
+  max-width: 390px;
+  margin: 0 auto;
+  left: 0; right: 0;
 }
-.photo-pose-btn {
-  padding: 6px 14px;
+
+.photo-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  width: 100%;
+}
+
+.photo-title {
+  flex: 1;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.photo-exit-btn {
+  padding: 8px 14px;
   border-radius: 20px;
-  border: 1.5px solid rgba(255,255,255,0.5);
-  background: rgba(255,255,255,0.2);
+  border: none;
+  background: rgba(255,255,255,0.15);
   color: white;
   font-size: 13px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  backdrop-filter: blur(4px);
 }
-.photo-pose-btn:active { transform: scale(0.92); }
-.photo-actions {
+
+.photo-canvas-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.photo-canvas {
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.photo-controls {
+  padding: 16px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+}
+
+.photo-pose-selector {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
 }
+
+.photo-label {
+  color: rgba(255,255,255,0.5);
+  font-size: 12px;
+  margin-right: 4px;
+}
+
+.photo-pose-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.1);
+  color: white;
+  font-size: 20px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-pose-btn.active {
+  border-color: var(--primary);
+  background: rgba(255,112,67,0.25);
+  transform: scale(1.1);
+}
+
 .photo-capture-btn {
-  padding: 10px 28px;
-  border-radius: 24px;
-  border: none;
-  background: var(--primary);
-  color: white;
-  font-size: 16px;
-  font-weight: 700;
-  font-family: inherit;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 4px solid white;
+  background: transparent;
   cursor: pointer;
-  box-shadow: var(--shadow-btn);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 8px;
+  transition: all 0.15s;
 }
-.photo-capture-btn:active { transform: scale(0.92); }
-.photo-exit-btn {
-  padding: 10px 18px;
-  border-radius: 24px;
-  border: 1.5px solid rgba(255,255,255,0.5);
-  background: rgba(0,0,0,0.3);
-  color: white;
-  font-size: 14px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  backdrop-filter: blur(4px);
+
+.photo-capture-btn:active {
+  transform: scale(0.9);
+  background: rgba(255,255,255,0.2);
+}
+
+.capture-circle {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: white;
+  display: block;
+}
+
+.photo-hint {
+  color: rgba(255,255,255,0.4);
+  font-size: 11px;
+  margin: 0;
 }
 .photo-exit-btn:active { transform: scale(0.92); }

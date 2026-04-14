@@ -20,6 +20,7 @@ import {
 import { getTimeOfDay, getTimeBackground } from '../data/time-guard';
 import { EXPEDITIONS, rollExpeditionRewards } from '../data/expeditions';
 import { COLORS } from '../data/design-tokens';
+import { drawPet, createAnimState } from '../game/PetRenderer';
 import { showToast } from '../ui/Toast';
 import { PetCanvas } from '../game/PetCanvas';
 import { checkNewAchievements, claimAchievements } from '../data/achievements';
@@ -954,107 +955,155 @@ export class HomeScene implements Scene {
 
   private enterPhotoMode(root: HTMLElement): void {
     if (!this.petCanvas) return;
+    const state = this.ctx.state.current;
+    const pet = getActivePet(state);
+    if (!pet) return;
 
-    // UI 숨기기
-    const uiElements = root.querySelectorAll(
-      '.home-header, .pet-name-display, .stat-bars, .bond-bar, .action-grid, .daily-strip, #jealousy-alert, #expedition-indicator, .ad-banner-slot',
-    );
-    uiElements.forEach(el => (el as HTMLElement).style.display = 'none');
-
-    // 포토 모드 UI
-    const photoUI = document.createElement('div');
-    photoUI.className = 'photo-mode-ui';
-    photoUI.id = 'photo-mode-ui';
-    photoUI.innerHTML = `
-      <div class="photo-pose-selector">
-        <button class="photo-pose-btn" data-pose="happy">😊 행복</button>
-        <button class="photo-pose-btn" data-pose="love">😍 사랑</button>
-        <button class="photo-pose-btn" data-pose="sleeping">😴 잠자기</button>
+    // 전체 화면 포토 모드 오버레이
+    const overlay = document.createElement('div');
+    overlay.className = 'photo-overlay';
+    overlay.innerHTML = `
+      <div class="photo-header">
+        <button class="photo-exit-btn" id="btn-photo-exit">← 돌아가기</button>
+        <span class="photo-title">📸 ${pet.name} 사진관</span>
       </div>
-      <div class="photo-actions">
-        <button class="photo-capture-btn" id="btn-capture">📸 찰칵!</button>
-        <button class="photo-exit-btn" id="btn-photo-exit">✕ 나가기</button>
+      <div class="photo-canvas-wrap" id="photo-canvas-wrap"></div>
+      <div class="photo-controls">
+        <div class="photo-pose-selector">
+          <span class="photo-label">포즈</span>
+          <button class="photo-pose-btn active" data-pose="happy">😊</button>
+          <button class="photo-pose-btn" data-pose="love">😍</button>
+          <button class="photo-pose-btn" data-pose="sleeping">😴</button>
+          <button class="photo-pose-btn" data-pose="neutral">🙂</button>
+        </div>
+        <button class="photo-capture-btn" id="btn-capture">
+          <span class="capture-circle"></span>
+        </button>
+        <p class="photo-hint">큰 버튼을 눌러 촬영하세요</p>
       </div>
     `;
-    root.appendChild(photoUI);
+    root.appendChild(overlay);
 
-    // 포즈 선택
-    photoUI.addEventListener('click', (e) => {
+    // 포토용 고해상도 Canvas 생성
+    const wrap = overlay.querySelector('#photo-canvas-wrap') as HTMLElement;
+    const photoCanvas = document.createElement('canvas');
+    const pSize = 300;
+    photoCanvas.width = pSize * 2;
+    photoCanvas.height = pSize * 2;
+    photoCanvas.style.width = `${pSize}px`;
+    photoCanvas.style.height = `${pSize}px`;
+    photoCanvas.className = 'photo-canvas';
+    wrap.appendChild(photoCanvas);
+
+    const pctx = photoCanvas.getContext('2d');
+    if (!pctx) return;
+    pctx.scale(2, 2);
+
+    let currentPose: 'happy' | 'love' | 'sleeping' | 'neutral' = 'happy';
+
+    // 포토 Canvas 렌더 함수
+    const renderPhotoFrame = (): void => {
+      if (!pctx) return;
+      const anim = createAnimState();
+      anim.emotion = currentPose === 'neutral' ? 'neutral' : currentPose;
+
+      // 배경
+      const grad = pctx.createLinearGradient(0, 0, 0, pSize);
+      grad.addColorStop(0, '#FFF3E0');
+      grad.addColorStop(1, '#E8F4FD');
+      pctx.fillStyle = grad;
+      pctx.fillRect(0, 0, pSize, pSize);
+
+      // 바닥
+      pctx.fillStyle = '#D7CCC8';
+      pctx.fillRect(0, pSize * 0.75, pSize, pSize * 0.25);
+
+      // 장식
+      pctx.fillStyle = 'rgba(255,183,197,0.2)';
+      for (let i = 0; i < 8; i++) {
+        pctx.beginPath();
+        pctx.arc(30 + i * 38, 20 + (i % 2) * 15, 4, 0, Math.PI * 2);
+        pctx.fill();
+      }
+
+      // 펫 (크게)
+      const stage = getGrowthStage(pet.type, pet.stats.bond);
+      const stageInfo = PETS[pet.type].stages[stage];
+      drawPet(pctx, pet.type, stage, anim, pSize / 2, pSize / 2 + 20, stageInfo.size * 1.5, pet.stats);
+
+      // 이름 태그
+      pctx.fillStyle = 'rgba(255,255,255,0.85)';
+      pctx.beginPath();
+      const tagW = 120;
+      const tagH = 24;
+      const tagX = pSize / 2 - tagW / 2;
+      const tagY = pSize - 35;
+      pctx.roundRect(tagX, tagY, tagW, tagH, 12);
+      pctx.fill();
+      pctx.fillStyle = '#212121';
+      pctx.font = '12px Quicksand, Pretendard, sans-serif';
+      pctx.textAlign = 'center';
+      pctx.textBaseline = 'middle';
+      pctx.fillText(`${pet.name} · ${stageInfo.name}`, pSize / 2, tagY + tagH / 2);
+    };
+
+    renderPhotoFrame();
+
+    // 이벤트
+    overlay.addEventListener('click', (e) => {
       const poseBtn = (e.target as HTMLElement).closest('[data-pose]') as HTMLElement | null;
       if (poseBtn) {
-        const pose = poseBtn.dataset.pose as 'happy' | 'love' | 'sleeping';
-        this.petCanvas?.setPhotoPose(pose);
+        currentPose = poseBtn.dataset.pose as typeof currentPose;
+        overlay.querySelectorAll('.photo-pose-btn').forEach(b => b.classList.remove('active'));
+        poseBtn.classList.add('active');
         this.ctx.sound.playClick();
+        renderPhotoFrame();
         return;
       }
 
-      // 촬영
       if ((e.target as HTMLElement).closest('#btn-capture')) {
-        this.captureAndShare();
+        // 플래시
+        pctx.fillStyle = 'rgba(255,255,255,0.9)';
+        pctx.fillRect(0, 0, pSize, pSize);
+        this.ctx.sound.playLucky();
+
+        setTimeout(() => {
+          renderPhotoFrame();
+          const dataUrl = photoCanvas.toDataURL('image/png');
+          this.sharePhoto(dataUrl);
+          showToast('📸 사진 저장!');
+        }, 200);
         return;
       }
 
-      // 나가기
       if ((e.target as HTMLElement).closest('#btn-photo-exit')) {
-        this.exitPhotoMode(root, photoUI, uiElements);
+        overlay.remove();
+        this.ctx.sound.playClick();
       }
     });
   }
 
-  private exitPhotoMode(
-    root: HTMLElement,
-    photoUI: HTMLElement,
-    uiElements: NodeListOf<Element>,
-  ): void {
-    photoUI.remove();
-    uiElements.forEach(el => (el as HTMLElement).style.display = '');
-    this.petCanvas?.setEmotion('neutral');
-    this.ctx.sound.playClick();
-  }
-
-  private captureAndShare(): void {
-    if (!this.petCanvas) return;
-
-    // 플래시 효과
-    this.petCanvas.flashEffect();
-    this.ctx.sound.playLucky();
-
-    // 약간의 딜레이 후 캡처 (플래시가 지나간 후)
-    setTimeout(() => {
-      if (!this.petCanvas) return;
-      const dataUrl = this.petCanvas.capturePhoto();
-
-      // Web Share API 시도
-      if (navigator.share && navigator.canShare) {
-        fetch(dataUrl)
-          .then(res => res.blob())
-          .then(blob => {
-            const file = new File([blob], 'petpal-photo.png', { type: 'image/png' });
-            if (navigator.canShare({ files: [file] })) {
-              navigator.share({
-                title: 'PetPal 사진',
-                text: '내 펫을 봐주세요!',
-                files: [file],
-              }).catch(err => {
+  private sharePhoto(dataUrl: string): void {
+    if (navigator.share && navigator.canShare) {
+      fetch(dataUrl)
+        .then(res => res.blob())
+        .then(blob => {
+          const file = new File([blob], 'petpal-photo.png', { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            navigator.share({ title: 'PetPal', text: '내 펫을 봐주세요!', files: [file] })
+              .catch(err => {
                 if (err instanceof Error && err.name !== 'AbortError') {
-                  console.error('[Photo] Share failed', err);
                   this.downloadPhoto(dataUrl);
                 }
               });
-            } else {
-              this.downloadPhoto(dataUrl);
-            }
-          })
-          .catch(err => {
-            console.error('[Photo] Blob conversion failed', err);
+          } else {
             this.downloadPhoto(dataUrl);
-          });
-      } else {
-        this.downloadPhoto(dataUrl);
-      }
-
-      showToast('📸 사진을 찍었어요!');
-    }, 150);
+          }
+        })
+        .catch(() => this.downloadPhoto(dataUrl));
+    } else {
+      this.downloadPhoto(dataUrl);
+    }
   }
 
   private downloadPhoto(dataUrl: string): void {
