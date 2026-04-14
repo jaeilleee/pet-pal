@@ -1,0 +1,204 @@
+/* ── Interactive Tutorial System ──────────────────────────────
+   원본: tomato-farm/game/src/ui/styles.css (.tutorial-* 블록 추출)
+   읽기 전용 원본을 수정하지 않음 (AP-0.1)
+
+   z-index 계층:
+     overlay  800  — 기본 레이어 (pointer-events: none)
+     bubble   810  — 안내 버블 (pointer-events: none)
+     skip     820  — 건너뛰기 버튼 (pointer-events: auto)
+     modal    850  — 모달 (tutorial 위)
+   ──────────────────────────────────────────────────────────── */
+
+.tutorial-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  height: 100dvh;
+  z-index: 800;
+  pointer-events: none;
+}
+
+.tutorial-dim {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.65);
+  /*
+   * WHY (pointer-events: auto on dim):
+   * dim 영역은 spotlight 외부 클릭을 차단해야 한다.
+   * cutout(4분할) 구조가 타겟 주변을 비워두므로
+   * spotlight 영역은 자연스럽게 클릭이 통과된다.
+   * pointer-events: none이면 dim 뒤의 버튼이 터치되어 UX 파괴.
+   */
+  pointer-events: auto;
+  transition: all 0.3s ease;
+}
+
+.tutorial-highlight-ring {
+  position: absolute;
+  border: 3px solid var(--color-accent, #ffc107);
+  border-radius: 8px;
+  box-shadow:
+    0 0 16px rgba(255, 193, 7, 0.5),
+    inset 0 0 8px rgba(255, 193, 7, 0.15);
+  /*
+   * WHY (pointer-events: none on ring):
+   * 하이라이트 링은 시각적 표시자일 뿐이다.
+   * pointer-events: auto이면 링이 타겟 터치를 가로막아
+   * 튜토리얼 액션이 수행 불가능해진다.
+   */
+  pointer-events: none;
+  transition: all 0.35s ease;
+  animation: tutorial-ring-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes tutorial-ring-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 16px rgba(255, 193, 7, 0.5),
+      inset 0 0 8px rgba(255, 193, 7, 0.15);
+  }
+  50% {
+    box-shadow:
+      0 0 28px rgba(255, 193, 7, 0.8),
+      inset 0 0 12px rgba(255, 193, 7, 0.25);
+  }
+}
+
+.tutorial-bubble {
+  position: absolute;
+  background: linear-gradient(135deg, #1a3a2e 0%, #0d2618 100%);
+  border: 2px solid var(--color-primary, #4caf50);
+  border-radius: 16px;
+  padding: 16px 20px;
+  min-width: 220px;
+  max-width: 300px;
+  text-align: center;
+  /*
+   * WHY (pointer-events: none on bubble):
+   * 버블은 안내 텍스트 전용이다.
+   * pointer-events: auto이면 버블이 spotlight 타겟 위를 덮을 때
+   * 유저 터치가 버블에 막혀 튜토리얼 액션이 수행 불가능해진다.
+   */
+  pointer-events: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 12px rgba(46, 125, 50, 0.3);
+  z-index: 810;
+  transition: top 0.3s ease, left 0.3s ease;
+}
+
+.tutorial-bubble-enter {
+  animation: tutorial-bubble-pop 0.3s ease-out;
+}
+
+@keyframes tutorial-bubble-pop {
+  0%   { transform: translateX(-50%) scale(0.8); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1);   opacity: 1; }
+}
+
+.tutorial-bubble-icon {
+  font-size: 36px;
+  margin-bottom: 6px;
+}
+
+.tutorial-bubble-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.5;
+}
+
+.tutorial-bubble-step {
+  font-size: 12px;
+  color: var(--color-text-dim, rgba(255,255,255,0.5));
+  margin-top: 8px;
+}
+
+/* 건너뛰기 버튼 — overlay(800) 위, modal(850) 아래 */
+.tutorial-skip {
+  position: fixed;
+  top: calc(var(--safe-top, 0px) + 8px);
+  right: 12px;
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--color-text-dim, rgba(255,255,255,0.5));
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 13px;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 820;
+  transition: background 0.2s;
+}
+
+.tutorial-skip:active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* 진행 점 — bubble(810)과 동일 레이어 */
+.tutorial-progress {
+  position: fixed;
+  bottom: calc(var(--nav-height, 56px) + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 810;
+}
+
+.tutorial-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.tutorial-dot.done   { background: var(--color-primary, #4caf50); }
+.tutorial-dot.active {
+  background: var(--color-accent, #ffc107);
+  box-shadow: 0 0 6px rgba(255, 193, 7, 0.6);
+  transform: scale(1.3);
+}
+
+/* 튜토리얼 종료 페이드 아웃 */
+.tutorial-fade-out {
+  animation: tutorial-fadeout 0.4s ease-out forwards;
+}
+
+@keyframes tutorial-fadeout {
+  to { opacity: 0; }
+}
+
+/* 완료 토스트 — modal(850)보다 위 */
+.tutorial-complete-toast {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 100%);
+  border: 2px solid var(--color-accent, #ffc107);
+  border-radius: 20px;
+  padding: 28px 36px;
+  text-align: center;
+  z-index: 900;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+  animation: tutorial-complete-in 0.5s ease-out;
+}
+
+@keyframes tutorial-complete-in {
+  0%   { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+}
+
+.tutorial-complete-icon  { font-size: 48px; margin-bottom: 8px; }
+.tutorial-complete-title {
+  font-size: 24px;
+  font-weight: 900;
+  color: #FFD700;
+  margin-bottom: 4px;
+}
+.tutorial-complete-desc  { font-size: 15px; color: #fff; }
+
+.tutorial-complete-fade {
+  animation: tutorial-fadeout 0.5s ease-out forwards;
+}
+
+/* 튜토리얼 진행 중 모달이 떠 있으면 overlay 숨김 (모달 우선) */
+body.modal-open .tutorial-overlay { display: none; }

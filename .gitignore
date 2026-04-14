@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.production
+*.apk
+*.ait
+outputs/
+android/
+ios/

@@ -1,0 +1,27 @@
+{
+  "name": "pet-pal",
+  "version": "1.0.0",
+  "description": "Game template based on game-template",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@apps-in-toss/web-framework": "^2.4.1"
+  },
+  "optionalDependencies": {
+    "@capacitor/core": "^6.2.1"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0"
+  }
+}
