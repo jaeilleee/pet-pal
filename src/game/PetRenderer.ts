@@ -9,21 +9,21 @@
 import type { PetType, GrowthStage } from '../data/pets';
 import type { PetStats } from '../data/state';
 
-/** 펫 색상 팔레트 */
+/** 펫 색상 팔레트 (채도 20% 강화) */
 const PET_COLORS: Record<PetType, { body: string; bodyLight: string; accent: string; eyeColor: string }> = {
-  dog: { body: '#D4A574', bodyLight: '#E8C9A0', accent: '#C08850', eyeColor: '#4A3520' },
-  cat: { body: '#B0B0B0', bodyLight: '#D0D0D0', accent: '#909090', eyeColor: '#2E7D32' },
-  bird: { body: '#FFD54F', bodyLight: '#FFE082', accent: '#FFA726', eyeColor: '#1A1A1A' },
-  pig: { body: '#FFB5C2', bodyLight: '#FFD4DC', accent: '#FF8FA3', eyeColor: '#3D3D3D' },
-  reptile: { body: '#81C784', bodyLight: '#A5D6A7', accent: '#4CAF50', eyeColor: '#FF6F00' },
+  dog: { body: '#C4915C', bodyLight: '#E0B88A', accent: '#A07040', eyeColor: '#3D2B15' },
+  cat: { body: '#9E9E9E', bodyLight: '#C8C8C8', accent: '#757575', eyeColor: '#1B5E20' },
+  bird: { body: '#FFC107', bodyLight: '#FFD54F', accent: '#FF9800', eyeColor: '#1A1A1A' },
+  pig: { body: '#F48FB1', bodyLight: '#F8BBD0', accent: '#EC407A', eyeColor: '#3D3D3D' },
+  reptile: { body: '#66BB6A', bodyLight: '#81C784', accent: '#388E3C', eyeColor: '#E65100' },
 };
 
-/** 성장 단계별 비율 */
+/** 성장 단계별 비율 (눈 크기 강화 -- 카와이) */
 const STAGE_RATIOS: Record<GrowthStage, { headRatio: number; bodyScale: number; eyeSize: number }> = {
-  baby: { headRatio: 0.55, bodyScale: 0.6, eyeSize: 0.18 },
-  child: { headRatio: 0.48, bodyScale: 0.75, eyeSize: 0.15 },
-  teen: { headRatio: 0.42, bodyScale: 0.9, eyeSize: 0.13 },
-  adult: { headRatio: 0.38, bodyScale: 1.0, eyeSize: 0.12 },
+  baby: { headRatio: 0.55, bodyScale: 0.7, eyeSize: 0.22 },
+  child: { headRatio: 0.48, bodyScale: 0.8, eyeSize: 0.18 },
+  teen: { headRatio: 0.42, bodyScale: 0.92, eyeSize: 0.15 },
+  adult: { headRatio: 0.38, bodyScale: 1.0, eyeSize: 0.13 },
 };
 
 export interface PetAnimState {
@@ -69,9 +69,9 @@ export function updateAnimState(state: PetAnimState, dt: number): void {
       state.blinkTimer = 0.15;
     }
   }
-  state.tailAngle = Math.sin(state.time * 3) * 0.3;
-  state.breathScale = 1 + Math.sin(state.time * 1.5) * 0.02;
-  state.bounceY = Math.sin(state.time * 2) * 2;
+  state.tailAngle = Math.sin(state.time * 3) * 0.5;
+  state.breathScale = 1 + Math.sin(state.time * 1.5) * 0.04;
+  state.bounceY = Math.sin(state.time * 2) * 4;
 
   // customAction 타이머 감소
   if (state.customActionTimer > 0) {
@@ -274,6 +274,13 @@ function drawBody(
   ctx.ellipse(0, 0, bodyR * 0.85, bodyR * 0.8, 0, 0, Math.PI * 2);
   ctx.fill();
 
+  // Body outline (separates character from background)
+  ctx.strokeStyle = colors.accent + '40';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, bodyR * 0.85 + 1, bodyR * 0.8 + 1, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
   // Belly (lighter oval)
   ctx.fillStyle = colors.bodyLight + 'CC';
   ctx.beginPath();
@@ -349,6 +356,13 @@ function drawHead(
   ctx.beginPath();
   ctx.arc(0, headY, headR, 0, Math.PI * 2);
   ctx.fill();
+
+  // Head outline
+  ctx.strokeStyle = colors.accent + '40';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(0, headY, headR + 1, 0, Math.PI * 2);
+  ctx.stroke();
 
   // Eyes -- energy < 20 이면 눈 높이 50% 축소 (반쯤 감김)
   const eyeSpacing = headR * 0.35;
@@ -518,21 +532,21 @@ function drawEye(
   ctx.arc(x, y + r * 0.1, r * 0.35, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eye shine (kawaii sparkle)
+  // Eye shine (kawaii sparkle -- larger highlights)
   ctx.fillStyle = '#FFFFFF';
   ctx.beginPath();
-  ctx.arc(x - r * 0.2, y - r * 0.2, r * 0.2, 0, Math.PI * 2);
+  ctx.arc(x - r * 0.2, y - r * 0.2, r * 0.28, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(x + r * 0.15, y + r * 0.15, r * 0.1, 0, Math.PI * 2);
+  ctx.arc(x + r * 0.15, y + r * 0.15, r * 0.15, 0, Math.PI * 2);
   ctx.fill();
 }
 
 function colors_backup(eyeColor: string): string {
-  return eyeColor === '#4A3520' ? '#E8C9A0' :
-    eyeColor === '#2E7D32' ? '#D0D0D0' :
-    eyeColor === '#1A1A1A' ? '#FFE082' :
-    eyeColor === '#FF6F00' ? '#A5D6A7' : '#FFD4DC';
+  return eyeColor === '#3D2B15' ? '#E0B88A' :
+    eyeColor === '#1B5E20' ? '#C8C8C8' :
+    eyeColor === '#1A1A1A' ? '#FFD54F' :
+    eyeColor === '#E65100' ? '#81C784' : '#F8BBD0';
 }
 
 function drawMouth(

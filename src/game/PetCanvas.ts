@@ -700,8 +700,65 @@ export class PetCanvas {
     c.fillStyle = grad;
     c.fillRect(0, 0, this.W, this.H);
 
+    // Soft top-down lighting
+    const lightGrad = c.createRadialGradient(
+      this.W * 0.5, -10, 0,
+      this.W * 0.5, -10, this.H * 0.8,
+    );
+    lightGrad.addColorStop(0, timeOfDay === 'night' ? 'rgba(100,130,200,0.06)' : 'rgba(255,255,240,0.18)');
+    lightGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = lightGrad;
+    c.fillRect(0, 0, this.W, this.H);
+
     this.drawWindow(c, timeOfDay);
+    this.drawWallClock(c, timeOfDay);
     this.drawWallPicture(c);
+  }
+
+  /** Wall clock showing current time */
+  private drawWallClock(c: CanvasRenderingContext2D, tod: string): void {
+    const cx = this.W * 0.5;
+    const cy = 28;
+    const r = 14;
+
+    // Clock face
+    c.fillStyle = tod === 'night' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)';
+    c.beginPath();
+    c.arc(cx, cy, r, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = tod === 'night' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)';
+    c.lineWidth = 1;
+    c.stroke();
+
+    // Hour/minute hands
+    const now = new Date();
+    const hours = now.getHours() % 12;
+    const minutes = now.getMinutes();
+    const hourAngle = ((hours + minutes / 60) / 12) * Math.PI * 2 - Math.PI / 2;
+    const minAngle = (minutes / 60) * Math.PI * 2 - Math.PI / 2;
+
+    c.strokeStyle = tod === 'night' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)';
+    c.lineCap = 'round';
+
+    // Hour hand
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(cx, cy);
+    c.lineTo(cx + Math.cos(hourAngle) * r * 0.5, cy + Math.sin(hourAngle) * r * 0.5);
+    c.stroke();
+
+    // Minute hand
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(cx, cy);
+    c.lineTo(cx + Math.cos(minAngle) * r * 0.7, cy + Math.sin(minAngle) * r * 0.7);
+    c.stroke();
+
+    // Center dot
+    c.fillStyle = c.strokeStyle;
+    c.beginPath();
+    c.arc(cx, cy, 1.5, 0, Math.PI * 2);
+    c.fill();
   }
 
   private drawWindow(c: CanvasRenderingContext2D, tod: string): void {
@@ -755,6 +812,22 @@ export class PetCanvas {
       c.lineTo(x, this.H);
       c.stroke();
     }
+
+    // Small rug in center
+    const rugCX = this.W * 0.5;
+    const rugCY = floorY + (this.H - floorY) * 0.4;
+    const rugW = this.W * 0.35;
+    const rugH = (this.H - floorY) * 0.45;
+    c.fillStyle = 'rgba(255,171,145,0.22)';
+    c.beginPath();
+    c.ellipse(rugCX, rugCY, rugW / 2, rugH / 2, 0, 0, Math.PI * 2);
+    c.fill();
+    // Rug border
+    c.strokeStyle = 'rgba(255,112,67,0.15)';
+    c.lineWidth = 1;
+    c.beginPath();
+    c.ellipse(rugCX, rugCY, rugW / 2 - 3, rugH / 2 - 2, 0, 0, Math.PI * 2);
+    c.stroke();
   }
 
   private drawFurniture(c: CanvasRenderingContext2D): void {
