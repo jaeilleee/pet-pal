@@ -37,6 +37,12 @@ export interface PetData {
   sickSince: number;
   /** 가출 경고 표시됨 여부 */
   runawayWarned: boolean;
+  /** 성격 변이 포인트 */
+  personalityPoints: Record<Personality, number>;
+  /** 가출 상태 */
+  isRunaway: boolean;
+  /** 가출 시작 시각 (ms) */
+  runawayAt: number;
 }
 
 export interface PetPalState {
@@ -146,6 +152,9 @@ export function createPetData(type: PetType, name: string, id: number): PetData 
     isSick: false,
     sickSince: 0,
     runawayWarned: false,
+    personalityPoints: { active: 0, foodie: 0, gentle: 0, playful: 0, sleepy: 0 },
+    isRunaway: false,
+    runawayAt: 0,
   };
 }
 
@@ -233,6 +242,11 @@ export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
       isSick: typeof p.isSick === 'boolean' ? p.isSick : false,
       sickSince: typeof p.sickSince === 'number' ? p.sickSince : 0,
       runawayWarned: typeof p.runawayWarned === 'boolean' ? p.runawayWarned : false,
+      personalityPoints: (p.personalityPoints && typeof p.personalityPoints === 'object')
+        ? p.personalityPoints as Record<Personality, number>
+        : { active: 0, foodie: 0, gentle: 0, playful: 0, sleepy: 0 },
+      isRunaway: typeof p.isRunaway === 'boolean' ? p.isRunaway : false,
+      runawayAt: typeof p.runawayAt === 'number' ? p.runawayAt : 0,
     }));
     // visitor 시스템 마이그레이션
     if (!Array.isArray(base.visitorLog)) base.visitorLog = [];
@@ -269,6 +283,9 @@ export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
       isSick: false,
       sickSince: 0,
       runawayWarned: false,
+      personalityPoints: { active: 0, foodie: 0, gentle: 0, playful: 0, sleepy: 0 },
+      isRunaway: false,
+      runawayAt: 0,
     });
   }
 
@@ -279,6 +296,35 @@ export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
     activePetIndex: 0,
     unlockedSlots: 1,
   };
+}
+
+/** 액션별 성격 포인트 매핑 */
+const ACTION_PERSONALITY_MAP: Record<string, Personality> = {
+  feed: 'foodie',
+  play: 'playful',
+  walk: 'active',
+  talk: 'gentle',
+  clean: 'sleepy',
+};
+
+/** 성격 변이 임계값 */
+const PERSONALITY_MUTATION_THRESHOLD = 50;
+
+/** 성격 변이 체크 — 포인트 50 도달 시 해당 성격으로 변이 */
+export function checkPersonalityMutation(pet: PetData): { pet: PetData; mutated: boolean; newPersonality: Personality | null } {
+  for (const [key, points] of Object.entries(pet.personalityPoints)) {
+    const personality = key as Personality;
+    if (points >= PERSONALITY_MUTATION_THRESHOLD && personality !== pet.personality) {
+      // 변이! 포인트 리셋
+      const resetPoints: Record<Personality, number> = { active: 0, foodie: 0, gentle: 0, playful: 0, sleepy: 0 };
+      return {
+        pet: { ...pet, personality, personalityPoints: resetPoints },
+        mutated: true,
+        newPersonality: personality,
+      };
+    }
+  }
+  return { pet, mutated: false, newPersonality: null };
 }
 
 /** 성격별 스탯 보너스 배율 */
@@ -371,14 +417,60 @@ export function healPet(pet: PetData): PetData {
   };
 }
 
-/** 가출 경고 체크: 24시간 이상 sick 방치 */
-export function checkRunawayWarning(pet: PetData): { pet: PetData; warn: boolean } {
-  if (!pet.isSick || pet.runawayWarned) return { pet, warn: false };
-  const sickHours = (Date.now() - pet.sickSince) / (1000 * 60 * 60);
-  if (sickHours >= 24) {
-    return { pet: { ...pet, runawayWarned: true }, warn: true };
+/** 가출 경고 및 가출 체크: 24시간 이상 sick 방치 */
+export function checkRunawayWarning(pet: PetData): { pet: PetData; warn: boolean; ranAway: boolean } {
+  // 이미 가출 중이면 48시간 후 자동 귀환 체크
+  if (pet.isRunaway) {
+    const runawayHours = (Date.now() - pet.runawayAt) / (1000 * 60 * 60);
+    if (runawayHours >= 48) {
+      // 자동 귀환 (bond -30 페널티)
+      return {
+        pet: {
+          ...pet,
+          isRunaway: false,
+          runawayAt: 0,
+          isSick: false,
+          sickSince: 0,
+          runawayWarned: false,
+          stats: { ...pet.stats, bond: Math.max(0, pet.stats.bond - 30) },
+        },
+        warn: false,
+        ranAway: false,
+      };
+    }
+    return { pet, warn: false, ranAway: false };
   }
-  return { pet, warn: false };
+
+  if (!pet.isSick) return { pet, warn: false, ranAway: false };
+  const sickHours = (Date.now() - pet.sickSince) / (1000 * 60 * 60);
+
+  // 24시간 이상 방치 → 가출!
+  if (sickHours >= 24) {
+    if (!pet.runawayWarned) {
+      // 먼저 경고
+      return { pet: { ...pet, runawayWarned: true }, warn: true, ranAway: false };
+    }
+    // 이미 경고됐으면 가출 실행
+    return {
+      pet: { ...pet, isRunaway: true, runawayAt: Date.now() },
+      warn: false,
+      ranAway: true,
+    };
+  }
+  return { pet, warn: false, ranAway: false };
+}
+
+/** 가출 펫 복귀 처리 */
+export function returnRunawayPet(pet: PetData): PetData {
+  return {
+    ...pet,
+    isRunaway: false,
+    runawayAt: 0,
+    isSick: false,
+    sickSince: 0,
+    runawayWarned: false,
+    stats: { ...pet.stats, bond: pet.stats.bond + 20 },
+  };
 }
 
 /** 시너지 보너스 배율 계산 */
@@ -435,6 +527,13 @@ export function applyEffectsToPet(
     }
   }
   pet.stats = stats;
+
+  // 성격 포인트 적립
+  if (action && ACTION_PERSONALITY_MAP[action]) {
+    const targetPersonality = ACTION_PERSONALITY_MAP[action];
+    pet.personalityPoints = { ...pet.personalityPoints };
+    pet.personalityPoints[targetPersonality] = (pet.personalityPoints[targetPersonality] ?? 0) + 1;
+  }
 
   // 질투: 돌봄 받은 펫은 질투 감소, 나머지는 소폭 증가
   for (let i = 0; i < pets.length; i++) {

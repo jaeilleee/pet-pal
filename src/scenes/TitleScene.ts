@@ -56,6 +56,13 @@ export class TitleScene implements Scene {
       this.ctx.sound.playClick();
 
       const state = this.ctx.state.current;
+
+      // 첫 실행 시 온보딩 스토리
+      if (!state.tutorialShown && state.pets.length === 0) {
+        this.showOnboardingStory(root);
+        return;
+      }
+
       if (state.pets.length > 0) {
         import('./HomeScene').then(m => {
           this.ctx.scenes.switchTo(() => new m.HomeScene(this.ctx));
@@ -140,6 +147,68 @@ export class TitleScene implements Scene {
 
     frameId = requestAnimationFrame(loop);
     this.cleanups.push(() => cancelAnimationFrame(frameId));
+  }
+
+  /** 온보딩 3컷 스토리 */
+  private showOnboardingStory(root: HTMLElement): void {
+    const cuts = [
+      { text: '어느 날, 길에서 작은 소리가 들렸어요...', emoji: '', bg: '🌙' },
+      { text: '살펴보니 작은 동물이 떨고 있었어요...', emoji: '🥺', bg: '🌿' },
+      { text: '데려가서 돌봐줄 거예요? 💕', emoji: '💕', bg: '🏠' },
+    ];
+
+    let currentCut = 0;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'onboarding-overlay';
+
+    const renderCut = (): void => {
+      const cut = cuts[currentCut];
+      const isLast = currentCut === cuts.length - 1;
+      const emojiShake = currentCut === 1 ? ' onboarding-shake' : '';
+
+      overlay.innerHTML = `
+        <div class="onboarding-scene">
+          <div class="onboarding-bg">${cut.bg}</div>
+          <div class="onboarding-emoji${emojiShake}">${cut.emoji}</div>
+          <p class="onboarding-text">${cut.text}</p>
+          <div class="onboarding-dots">
+            ${cuts.map((_, i) => `<span class="dot ${i === currentCut ? 'active' : ''}"></span>`).join('')}
+          </div>
+          ${isLast
+            ? '<button class="btn-primary onboarding-yes" id="btn-onboarding-yes">네!</button>'
+            : '<p class="onboarding-tap">탭하여 계속</p>'
+          }
+        </div>
+      `;
+
+      if (isLast) {
+        const yesBtn = overlay.querySelector('#btn-onboarding-yes') as HTMLElement;
+        yesBtn.addEventListener('click', () => {
+          this.ctx.sound.playClick();
+          this.ctx.state.current = { ...this.ctx.state.current, tutorialShown: true };
+          this.ctx.save.save(this.ctx.state.current);
+          overlay.remove();
+          import('./PetSelectScene').then(m => {
+            this.ctx.scenes.switchTo(() => new m.PetSelectScene(this.ctx));
+          }).catch(err => console.error('[TitleScene] PetSelect load failed', err));
+        });
+      }
+    };
+
+    overlay.addEventListener('click', (e) => {
+      // "네!" 버튼 클릭은 별도 처리
+      if ((e.target as HTMLElement).closest('#btn-onboarding-yes')) return;
+
+      if (currentCut < cuts.length - 1) {
+        currentCut++;
+        this.ctx.sound.playClick();
+        renderCut();
+      }
+    });
+
+    renderCut();
+    root.appendChild(overlay);
   }
 
   unmount(): void {

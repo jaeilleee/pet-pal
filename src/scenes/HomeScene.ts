@@ -12,7 +12,7 @@ import {
   getActivePet, getActiveStats, applyEffectsToPet,
   decayAllPets, overallMood, moodEmoji,
   checkSickness, healPet, checkRunawayWarning,
-  getActivePetTitle,
+  getActivePetTitle, checkPersonalityMutation, returnRunawayPet,
 } from '../data/state';
 import { getItemById } from '../data/items';
 import {
@@ -155,9 +155,10 @@ export class HomeScene implements Scene {
     this.petCanvas = new PetCanvas(container);
     this.petCanvas.setPets(state.pets);
     this.petCanvas.setActivePet(state.activePetIndex);
-    // 탐험 중인 펫 숨기기
+    // 탐험 중 + 가출 중 펫 숨기기
     const expPetIndices = state.expeditions.map(e => e.petIndex);
-    this.petCanvas.setExpeditionPets(expPetIndices);
+    const runawayPetIndices = state.pets.map((p, i) => p.isRunaway ? i : -1).filter(i => i >= 0);
+    this.petCanvas.setExpeditionPets([...expPetIndices, ...runawayPetIndices]);
     if (isSleeping) this.petCanvas.setEmotion('sleeping');
     this.petCanvas.setRoomTheme(state.activeRoomTheme);
     this.petCanvas.setFurniture(state.ownedFurniture.map(id => getItemById(id)?.emoji ?? ''));
@@ -194,6 +195,9 @@ export class HomeScene implements Scene {
 
     // 아픈 상태 UI
     this.showSickIndicators(activePet);
+
+    // 가출 펫 알림
+    this.showRunawayAlerts(root, state);
 
     this.bindActions(root);
     this.bindPetTabsDelegation(root);
@@ -449,6 +453,7 @@ export class HomeScene implements Scene {
     }
 
     this.checkEvolution(prevBond, root);
+    this.checkPersonalityMutation();
     this.checkAchievements();
 
     // 럭키 드롭 (돌봄 액션 후 10% 확률)
@@ -698,15 +703,144 @@ export class HomeScene implements Scene {
   /** 질병 체크: 모든 펫에 대해 접속 시 실행 */
   private processSicknessCheck(): void {
     const state = this.ctx.state.current;
+    const runawayPetNames: string[] = [];
     const pets = state.pets.map(pet => {
       const checked = checkSickness(pet);
-      const { pet: warned, warn } = checkRunawayWarning(checked);
+      const { pet: warned, warn, ranAway } = checkRunawayWarning(checked);
       if (warn) {
         showToast(`⚠️ ${warned.name}이(가) 너무 오래 아팠어요! 가출 경고!`);
+      }
+      if (ranAway) {
+        runawayPetNames.push(warned.name);
       }
       return warned;
     });
     this.ctx.state.current = { ...state, pets };
+
+    // 가출 알림
+    for (const name of runawayPetNames) {
+      showToast(`${name}이(가) 가출했어요! 찾으러 가세요!`);
+    }
+  }
+
+  /** 가출 펫 알림 표시 */
+  private showRunawayAlerts(root: HTMLElement, state: PetPalState): void {
+    const runawayPets = state.pets.filter(p => p.isRunaway);
+    if (runawayPets.length === 0) return;
+
+    for (const pet of runawayPets) {
+      const petIndex = state.pets.indexOf(pet);
+      const alert = document.createElement('div');
+      alert.className = 'runaway-alert';
+      alert.innerHTML = `
+        <span>🚨 ${pet.name}이(가) 가출했어요!</span>
+        <button class="btn-primary btn-small btn-find-pet" data-runaway-idx="${petIndex}">찾으러 가기</button>
+      `;
+      const petContainer = root.querySelector('#pet-container');
+      if (petContainer) {
+        petContainer.insertAdjacentElement('afterend', alert);
+      }
+
+      const findBtn = alert.querySelector('.btn-find-pet') as HTMLElement;
+      const handler = (): void => {
+        this.ctx.sound.playClick();
+        this.showRunawaySearch(root, petIndex);
+      };
+      findBtn.addEventListener('click', handler);
+      this.cleanups.push(() => findBtn.removeEventListener('click', handler));
+    }
+  }
+
+  /** 성격 변이 체크 */
+  private checkPersonalityMutation(): void {
+    const state = this.ctx.state.current;
+    const idx = state.activePetIndex;
+    const pet = state.pets[idx];
+    if (!pet) return;
+
+    const { pet: mutated, mutated: didMutate, newPersonality } = checkPersonalityMutation(pet);
+    if (didMutate && newPersonality) {
+      const pets = [...state.pets];
+      pets[idx] = mutated;
+      this.ctx.state.current = { ...state, pets };
+      const personalityNames: Record<string, string> = {
+        active: '활발한', foodie: '먹보', gentle: '온순한', playful: '장난꾸러기', sleepy: '졸린',
+      };
+      showToast(`✨ ${pet.name}의 성격이 ${personalityNames[newPersonality]}(으)로 변했어요!`);
+      this.petCanvas?.emitParticles('star', 10);
+      this.ctx.sound.playLevelUp();
+    }
+  }
+
+  /** 가출 펫 찾기 미니게임 표시 */
+  private showRunawaySearch(root: HTMLElement, petIndex: number): void {
+    const state = this.ctx.state.current;
+    const pet = state.pets[petIndex];
+    if (!pet) return;
+
+    const stage = getGrowthStage(pet.type, pet.stats.bond);
+    const petEmoji = PETS[pet.type].stages[stage].emoji;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'runaway-overlay';
+
+    // 3개 실루엣 중 진짜 찾기
+    const positions = [0, 1, 2];
+    const realPos = Math.floor(Math.random() * 3);
+    const decoys = ['🌳', '🪨'];
+
+    overlay.innerHTML = `
+      <div class="runaway-game">
+        <h3>🔍 ${pet.name}을(를) 찾아요!</h3>
+        <p class="runaway-hint">숲에서 ${pet.name}을(를) 찾아주세요!</p>
+        <div class="runaway-forest">
+          <div class="forest-bg">🌲🌳🌿🍃🌲🌳🌿🍃🌲</div>
+          <div class="runaway-silhouettes">
+            ${positions.map(i => `
+              <button class="silhouette-btn" data-pos="${i}">
+                <span class="silhouette-shadow">${i === realPos ? petEmoji : decoys[i > realPos ? i - 1 : i]}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+        <button class="btn-secondary btn-small runaway-cancel">포기하기</button>
+      </div>
+    `;
+    root.appendChild(overlay);
+
+    // 클릭 이벤트
+    overlay.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.silhouette-btn') as HTMLElement | null;
+      if (btn) {
+        const pos = parseInt(btn.dataset.pos ?? '-1', 10);
+        if (pos === realPos) {
+          // 성공!
+          const pets = [...this.ctx.state.current.pets];
+          pets[petIndex] = returnRunawayPet(pets[petIndex]);
+          this.ctx.state.current = { ...this.ctx.state.current, pets };
+          this.ctx.save.save(this.ctx.state.current);
+
+          overlay.remove();
+          showToast(`🎉 ${pet.name}을(를) 찾았어요! 돌아와줘서 고마워!`);
+          this.petCanvas?.showSpeech('돌아와줘서 고마워!');
+          this.petCanvas?.emitParticles('heart', 15);
+          this.petCanvas?.setPets(this.ctx.state.current.pets);
+          this.ctx.sound.playLevelUp();
+          this.refreshUI(root);
+        } else {
+          // 실패 — 다시 시도
+          btn.classList.add('wrong');
+          btn.setAttribute('disabled', 'true');
+          showToast('여기가 아니에요! 다시 찾아보세요');
+          this.ctx.sound.playClick();
+        }
+        return;
+      }
+
+      if ((e.target as HTMLElement).closest('.runaway-cancel')) {
+        overlay.remove();
+      }
+    });
   }
 
   /** 아픈 상태 UI 표시 */

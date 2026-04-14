@@ -1452,3 +1452,162 @@
   white-space: nowrap;
   cursor: default;
 }
+
+/* ===== Letter Modal ===== */
+.letter-modal {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 24px 20px;
+  max-width: 340px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.letter-modal h3 { margin: 0 0 16px; font-size: 18px; }
+.letter-textarea {
+  width: 100%;
+  border: 2px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: none;
+  box-sizing: border-box;
+}
+.letter-textarea:focus { border-color: var(--primary-light); outline: none; }
+.letter-char-count { text-align: right; font-size: 11px; color: var(--text-light); margin: 4px 0 12px; }
+.letter-actions { display: flex; gap: 8px; justify-content: center; }
+.letter-reply {
+  margin-top: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #FFF3E0, #FFECB3);
+  border-radius: var(--radius-md);
+  animation: slideUp 0.4s ease;
+}
+.letter-reply-header { font-size: 13px; font-weight: 700; color: var(--primary-dark); margin-bottom: 8px; }
+.letter-reply-text { font-size: 15px; color: var(--text-dark); font-style: italic; }
+
+/* ===== Weekly Report ===== */
+.weekly-report { padding: 0 4px; }
+.weekly-report-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--card-border);
+  font-size: 14px;
+}
+.weekly-report-stars {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0 8px;
+  gap: 6px;
+}
+.report-stars { font-size: 24px; letter-spacing: 4px; }
+.report-eval { font-size: 16px; font-weight: 700; color: var(--primary); }
+
+/* ===== Runaway Alert ===== */
+.runaway-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #FFEBEE, #FFCDD2);
+  border: 2px solid #EF5350;
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #C62828;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.btn-find-pet { white-space: nowrap; }
+
+/* ===== Runaway Search Game ===== */
+.runaway-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.runaway-game {
+  background: var(--card-bg);
+  border-radius: var(--radius-xl);
+  padding: 24px 20px;
+  max-width: 340px;
+  width: 90%;
+  text-align: center;
+}
+.runaway-game h3 { margin: 0 0 8px; font-size: 18px; }
+.runaway-hint { font-size: 13px; color: var(--text-medium); margin-bottom: 16px; }
+.forest-bg { font-size: 24px; letter-spacing: 4px; margin-bottom: 12px; filter: brightness(0.8); }
+.runaway-silhouettes { display: flex; gap: 16px; justify-content: center; margin-bottom: 20px; }
+.silhouette-btn {
+  width: 80px; height: 80px;
+  background: #2E7D32;
+  border: 3px solid #1B5E20;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  position: relative;
+}
+.silhouette-btn:active { transform: scale(0.9); }
+.silhouette-btn.wrong { background: #C62828; border-color: #B71C1C; pointer-events: none; }
+.silhouette-shadow { font-size: 36px; filter: brightness(0.3); transition: filter 0.3s; }
+.silhouette-btn:hover .silhouette-shadow { filter: brightness(0.5); }
+.runaway-cancel { margin-top: 8px; }
+
+/* ===== Onboarding Story ===== */
+.onboarding-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  cursor: pointer;
+}
+.onboarding-scene {
+  text-align: center;
+  padding: 40px 30px;
+  max-width: 340px;
+  animation: fadeIn 0.5s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.onboarding-bg { font-size: 48px; margin-bottom: 24px; }
+.onboarding-emoji { font-size: 64px; margin-bottom: 20px; min-height: 70px; }
+.onboarding-shake { animation: shake 0.8s ease-in-out infinite; }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.onboarding-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: white;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+.onboarding-dots { display: flex; gap: 8px; justify-content: center; margin-bottom: 24px; }
+.onboarding-dots .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  transition: background 0.3s;
+}
+.onboarding-dots .dot.active { background: white; }
+.onboarding-tap { font-size: 13px; color: rgba(255,255,255,0.5); }
+.onboarding-yes { width: 160px; padding: 14px 0; font-size: 18px; cursor: pointer; }

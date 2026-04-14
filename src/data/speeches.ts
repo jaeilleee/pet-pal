@@ -12,6 +12,7 @@ export interface SpeechSet {
   bored: string[];
   greeting: string[];
   petted: string[];
+  letterReplies: string[];
 }
 
 export const PET_SPEECHES: Record<Personality, SpeechSet> = {
@@ -22,6 +23,7 @@ export const PET_SPEECHES: Record<Personality, SpeechSet> = {
     bored: ['심심해! 뭐 하자!', '가만있으면 답답해!', '밖에 나가고 싶어!', '놀이공원 가자!', '뭐 재밌는 거 없어?', '달리기 시합하자!', '산책 안 가?', '체조라도 하자!'],
     greeting: ['주인!!! 왔어?!', '기다렸어! 빨리!', '드디어 왔다!', '오늘 뭐 하자!', '산책 갈 거지?!', '놀아줄 거지?!', '신난다! 주인이다!', '반가워! 뛰자!'],
     petted: ['좋아! 더 해줘!', '기분 좋아! 히히', '신난다!', '쓰담쓰담 좋아!', '흐흐 간지러워~', '너무 좋아!', '앙 행복해!', '더! 더!'],
+    letterReplies: ['고마워! 나도 널 좋아해!', '편지 읽고 힘이 났어!', '우리 산책 가자! 편지는 주머니에 넣을게!', '편지보다 같이 놀고 싶어!'],
   },
   foodie: {
     happy: ['맛있는 거 먹고 싶다!', '오늘 간식 뭐야?', '배불러~ 행복해', '맛있었어!', '디저트 있어?', '밥 시간 아냐?', '냠냠 기대돼!', '오늘 메뉴가 뭘까~'],
@@ -30,6 +32,7 @@ export const PET_SPEECHES: Record<Personality, SpeechSet> = {
     bored: ['먹을 거 없어?', '간식 시간 아냐?', '맛있는 거 찾아보자', '새 메뉴 없어?', '뭐 좀 줘~', '입이 심심해', '과자라도 줘봐', '미식 탐험 가자!'],
     greeting: ['밥 줄 거야?', '간식 가져왔어?', '배고팠어!', '뭐 맛있는 거 있어?', '드디어 밥 시간!', '맛있는 냄새 나!', '오늘 저녁 뭐야?', '주인! 먹을 거!'],
     petted: ['쓰담보다 간식이...', '음 좋긴 한데 밥은?', '배 만져주면 좋아~', '먹을 때 만져주면 더 좋아', '행복해~ 간식 줘', '쓰담도 맛있어!', '간식이면 더 좋겠지만~', '좋아좋아!'],
+    letterReplies: ['편지보다 간식이 좋은데..ㅋ', '감동받았어! 밥은?', '편지 맛있어? 먹어도 돼?', '고마워~ 답장 대신 간식 줘!'],
   },
   gentle: {
     happy: ['...좋아', '옆에 있어줘', '고마워...', '이대로가 좋아', '평화롭다...', '따뜻해...', '행복해...', '조용히 있자'],
@@ -38,6 +41,7 @@ export const PET_SPEECHES: Record<Personality, SpeechSet> = {
     bored: ['...뭐 할까', '같이 있으면 돼', '책 읽어줘', '조용히 놀자', '가만히 있어도 좋아', '창밖이 예뻐', '구름 보자', '같이 낮잠 자자'],
     greeting: ['...왔구나', '기다렸어', '보고 싶었어', '어서 와', '...다행이야', '돌아왔구나', '오래 걸렸네', '...반가워'],
     petted: ['...좋아', '더 해줘...', '따뜻해', '이 느낌 좋아', '고마워...', '좋다...', '계속 만져줘', '...행복해'],
+    letterReplies: ['...고마워 (꼬리 살랑)', '편지 소중히 간직할게', '...읽다가 눈물이 났어', '따뜻한 마음이 느껴져...'],
   },
   playful: {
     happy: ['놀자놀자!', '까꿍!', '잡아봐~', '히히 재밌다!', '이것도 해보자!', '오예!', '장난치자!', '깔깔깔!', '숨바꼭질하자!', '나 잡아봐라!'],
@@ -46,6 +50,7 @@ export const PET_SPEECHES: Record<Personality, SpeechSet> = {
     bored: ['심심해~', '놀자!', '재밌는 거 없어?', '장난감 어딨어?', '숨바꼭질하자!', '술래잡기!', '뭐 하고 놀까?', '그네 타자!', '미끄럼틀 가자!'],
     greeting: ['주인이다! 놀자!', '심심했어! 같이 놀자!', '드디어! 장난치자!', '까꿍! 놀랐지?', '숨어있었어! 찾았다!', '놀 시간이다!', '오늘 뭐 하고 놀까?', '뭐 재밌는 거 가져왔어?'],
     petted: ['까르르!', '간지러워! 히히', '더! 더!', '여기도 만져줘!', '놀이의 시작!', '씐나~', '좋아좋아!', '이번엔 내가 만져줄게!'],
+    letterReplies: ['편지 접어서 비행기 만들자!', 'ㅋㅋㅋ 웃겨! 또 써줘!', '편지로 보물찾기 하자!', '나도 편지 쓸래! ...글씨 못 써서 발바닥 찍을게!'],
   },
   sleepy: {
     happy: ['음냐...', '5분만 더...', '좋아... 쿨쿨', '꿈에서 간식 먹었어', '침대가 최고야', '이불 속이 좋아', '평화로워...', '나른해서 좋아~'],
@@ -54,6 +59,7 @@ export const PET_SPEECHES: Record<Personality, SpeechSet> = {
     bored: ['하품... 뭐 하자고?', '누워서 뭐 하지?', '잠 안 오면 뭐 하지?', '이불 속에서 놀자', '눈 감고 놀자', '귀찮아... 그냥 자자', '누워있는 것도 놀이야', '낮잠이 최고야'],
     greeting: ['음... 왔어?', '5분만 더 잘게...', '아 눈부셔...', '어... 안녕...', '왔구나... 쿨쿨', '음냐... 반가워', '자다가 깼어...', '하품... 어서 와'],
     petted: ['음냐... 좋아', '자장가 불러줘...', '쓰다듬으면 잠 와...', '포근해...', '좋아... 쿨쿨', '그대로... 자도 돼?', '더 해주면 잠들 거야', '편안해...'],
+    letterReplies: ['음냐...읽다 잠들었어', '꿈에서 답장 보냈는데...', '편지를 베개 삼아 잘게...', '고마워... 쿨쿨... 내일 읽을게...'],
   },
 };
 
@@ -71,6 +77,12 @@ export function getPersonalitySpeech(personality: Personality, stats: PetStats):
   const category = getSpeechCategory(stats);
   const speeches = PET_SPEECHES[personality][category];
   return speeches[Math.floor(Math.random() * speeches.length)];
+}
+
+/** 편지 답장 반환 */
+export function getLetterReply(personality: Personality): string {
+  const replies = PET_SPEECHES[personality].letterReplies;
+  return replies[Math.floor(Math.random() * replies.length)];
 }
 
 /** 특정 카테고리에서 성격 대사 반환 */
