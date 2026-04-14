@@ -46,6 +46,8 @@ interface CanvasPet {
   interactionCooldown: number;
   /** 다른 펫을 따라가는 중인지 */
   followingPetIndex: number;
+  /** 아픈 상태 */
+  isSick: boolean;
 }
 
 export class PetCanvas {
@@ -65,6 +67,9 @@ export class PetCanvas {
 
   private pets: CanvasPet[] = [];
   private activePetIndex = 0;
+  private visitorEmoji: string | null = null;
+  private visitorBounceTime = 0;
+  private tearTimer = 0;
 
   constructor(container: HTMLElement) {
     this.particles = new ParticleSystem();
@@ -108,6 +113,7 @@ export class PetCanvas {
         existing.name = pd.name;
         existing.personality = pd.personality;
         existing.stats = pd.stats;
+        existing.isSick = pd.isSick;
         return existing;
       }
 
@@ -147,6 +153,7 @@ export class PetCanvas {
       bounceTimer: 0,
       interactionCooldown: 0,
       followingPetIndex: -1,
+      isSick: pd.isSick,
     };
   }
 
@@ -299,6 +306,12 @@ export class PetCanvas {
     return this.canvas;
   }
 
+  /** 방문자 이모지 설정 (null이면 숨김) */
+  setVisitor(emoji: string | null): void {
+    this.visitorEmoji = emoji;
+    this.visitorBounceTime = 0;
+  }
+
   /** 질투 반응 트리거 (활성 펫에 액션 시 호출) */
   triggerJealousy(): void {
     for (let i = 0; i < this.pets.length; i++) {
@@ -335,6 +348,19 @@ export class PetCanvas {
       if (pet.interactionCooldown > 0) {
         pet.interactionCooldown -= dt;
       }
+    }
+
+    // 방문자 바운스 타이머
+    if (this.visitorEmoji) {
+      this.visitorBounceTime += dt;
+    }
+
+    // 눈물 타이머 (happiness < 15)
+    this.tearTimer -= dt;
+    const activePet = this.pets[this.activePetIndex];
+    if (activePet?.stats && activePet.stats.happiness < 15 && this.tearTimer <= 0) {
+      this.tearTimer = 2;
+      this.particles.emit(activePet.x, activePet.y - activePet.size * 0.2, 'bubble', 2);
     }
 
     // 펫 간 상호작용 체크
@@ -504,7 +530,43 @@ export class PetCanvas {
       this.renderSinglePet(c, pet, index === this.activePetIndex);
     }
 
+    // 극단적 스탯 배경 오버레이
+    this.drawStatOverlay(c);
+
+    // 방문자 렌더
+    this.drawVisitor(c);
+
     this.particles.render(c);
+  }
+
+  /** 스탯 합계에 따른 배경 오버레이 */
+  private drawStatOverlay(c: CanvasRenderingContext2D): void {
+    const pet = this.pets[this.activePetIndex];
+    if (!pet?.stats) return;
+    const total = pet.stats.hunger + pet.stats.happiness + pet.stats.cleanliness + pet.stats.energy;
+
+    if (total < 100) {
+      // 어두운 오버레이
+      c.fillStyle = 'rgba(0,0,0,0.10)';
+      c.fillRect(0, 0, this.W, this.H);
+    } else if (total > 320) {
+      // 가끔 무지개 파티클
+      if (Math.random() < 0.02) {
+        const rx = Math.random() * this.W;
+        const ry = Math.random() * this.H * 0.5;
+        this.particles.emit(rx, ry, 'sparkle', 1);
+      }
+    }
+  }
+
+  /** 방문자 렌더링 (우하단, 위아래 바운스) */
+  private drawVisitor(c: CanvasRenderingContext2D): void {
+    if (!this.visitorEmoji) return;
+    const vx = this.W - 40;
+    const vy = this.H * 0.65 + Math.sin(this.visitorBounceTime * 2.5) * 4;
+    c.font = '22px Apple Color Emoji, Segoe UI Emoji';
+    c.textAlign = 'center';
+    c.fillText(this.visitorEmoji, vx, vy);
   }
 
   private renderSinglePet(
@@ -515,6 +577,9 @@ export class PetCanvas {
     if (pet.type === 'dog' && pet.stats && pet.stats.happiness > 70) {
       pet.anim.tailAngle *= 2;
     }
+
+    // sick 상태를 anim에 동기화
+    pet.anim.isSick = pet.isSick;
 
     // 새: 날개짓 빈도를 happiness에 비례시키려면 time 스케일 조정
     // (drawFeatures 내에서 anim.time * 4로 계산하므로 간접 처리)
@@ -532,6 +597,14 @@ export class PetCanvas {
 
     // 꼬리 각도 복원
     pet.anim.tailAngle = origTailAngle;
+
+    // Hunger < 15: floating bowl emoji
+    if (pet.stats && pet.stats.hunger < 15) {
+      const bowlY = renderY - pet.size * 0.45 + Math.sin(pet.anim.time * 3) * 3;
+      c.font = '14px Apple Color Emoji, Segoe UI Emoji';
+      c.textAlign = 'center';
+      c.fillText('🍽️', pet.x, bowlY);
+    }
 
     // Accessory
     if (pet.accessory) {

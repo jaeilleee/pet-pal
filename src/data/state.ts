@@ -31,6 +31,12 @@ export interface PetData {
   joinedDate: string;
   /** 질투 수치 0-100 (다른 펫에 관심 줄 때 증가) */
   jealousy: number;
+  /** 아픈 상태 (스탯 합계 < 100이면 30% 확률 발동) */
+  isSick: boolean;
+  /** 아픈 시작 시각 (ms) */
+  sickSince: number;
+  /** 가출 경고 표시됨 여부 */
+  runawayWarned: boolean;
 }
 
 export interface PetPalState {
@@ -88,6 +94,12 @@ export interface PetPalState {
 
   // === Diary ===
   diaryEntries: DiaryEntry[];
+
+  // === Visitor System ===
+  /** 방문한 visitor id 목록 (도감용) */
+  visitorLog: string[];
+  /** 현재 방문 중인 방문자 */
+  currentVisitor: { id: string; arrivedAt: number } | null;
 }
 
 export interface DiaryEntry {
@@ -114,6 +126,9 @@ export function createPetData(type: PetType, name: string, id: number): PetData 
     equippedAccessory: null,
     joinedDate: new Date().toISOString().slice(0, 10),
     jealousy: 0,
+    isSick: false,
+    sickSince: 0,
+    runawayWarned: false,
   };
 }
 
@@ -152,6 +167,8 @@ export function createInitialState(): PetPalState {
     sessionStartedAt: Date.now(),
     lastReviewRequestAt: 0,
     diaryEntries: [],
+    visitorLog: [],
+    currentVisitor: null,
   };
 }
 
@@ -191,7 +208,13 @@ export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
       stats: migratePetStats(p.stats),
       jealousy: typeof p.jealousy === 'number' ? p.jealousy : 0,
       joinedDate: p.joinedDate ?? '',
+      isSick: typeof p.isSick === 'boolean' ? p.isSick : false,
+      sickSince: typeof p.sickSince === 'number' ? p.sickSince : 0,
+      runawayWarned: typeof p.runawayWarned === 'boolean' ? p.runawayWarned : false,
     }));
+    // visitor 시스템 마이그레이션
+    if (!Array.isArray(base.visitorLog)) base.visitorLog = [];
+    if (base.currentVisitor === undefined) base.currentVisitor = null;
     return base as PetPalState;
   }
 
@@ -213,6 +236,9 @@ export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
       equippedAccessory: oldAccessory,
       joinedDate: '',
       jealousy: 0,
+      isSick: false,
+      sickSince: 0,
+      runawayWarned: false,
     });
   }
 
@@ -251,16 +277,53 @@ export function decayAllPets(state: PetPalState): PetPalState {
 
   const pets = state.pets.map(pet => {
     const stats = { ...pet.stats };
-    stats.hunger = Math.max(15, stats.hunger - decay * 1.5);
-    stats.happiness = Math.max(15, stats.happiness - decay * 1.2);
-    stats.cleanliness = Math.max(15, stats.cleanliness - decay * 0.8);
-    stats.energy = Math.max(10, stats.energy - decay * 0.6);
+    stats.hunger = Math.max(5, stats.hunger - decay * 1.5);
+    stats.happiness = Math.max(5, stats.happiness - decay * 1.2);
+    stats.cleanliness = Math.max(5, stats.cleanliness - decay * 0.8);
+    stats.energy = Math.max(5, stats.energy - decay * 0.6);
+
+    // sick이면 bond도 접속마다 감소
+    if (pet.isSick) {
+      stats.bond = Math.max(0, stats.bond - 1);
+    }
+
     // 질투도 시간 경과로 감소
     const jealousy = Math.max(0, pet.jealousy - decay * 2);
     return { ...pet, stats, jealousy };
   });
 
   return { ...state, pets, lastDecayAt: now };
+}
+
+/** 접속 시 질병 체크: overallMood < 25이면 30% 확률로 발병 */
+export function checkSickness(pet: PetData): PetData {
+  if (pet.isSick) return pet; // 이미 아픔
+  const mood = overallMood(pet.stats);
+  if (mood < 25 && Math.random() < 0.3) {
+    return { ...pet, isSick: true, sickSince: Date.now() };
+  }
+  return pet;
+}
+
+/** 치료 (50G) */
+export function healPet(pet: PetData): PetData {
+  return {
+    ...pet,
+    isSick: false,
+    sickSince: 0,
+    runawayWarned: false,
+    stats: { ...pet.stats, bond: pet.stats.bond + 10 },
+  };
+}
+
+/** 가출 경고 체크: 24시간 이상 sick 방치 */
+export function checkRunawayWarning(pet: PetData): { pet: PetData; warn: boolean } {
+  if (!pet.isSick || pet.runawayWarned) return { pet, warn: false };
+  const sickHours = (Date.now() - pet.sickSince) / (1000 * 60 * 60);
+  if (sickHours >= 24) {
+    return { pet: { ...pet, runawayWarned: true }, warn: true };
+  }
+  return { pet, warn: false };
 }
 
 /** 특정 펫에 효과 적용 */
@@ -273,11 +336,14 @@ export function applyEffectsToPet(
   const pets = [...state.pets];
   const pet = { ...pets[petIndex] };
   const mult = action ? getPersonalityMultiplier(pet.personality, action) : 1.0;
+  // sick이면 모든 긍정 효과 50% 감소
+  const sickPenalty = pet.isSick ? 0.5 : 1.0;
 
   const stats = { ...pet.stats };
   for (const [key, value] of Object.entries(effects)) {
     const k = key as keyof PetStats;
-    const adjusted = k === 'bond' ? Math.round(value * mult) : value * (value > 0 ? mult : 1);
+    const baseMult = value > 0 ? mult * sickPenalty : 1;
+    const adjusted = k === 'bond' ? Math.round(value * baseMult) : value * baseMult;
     if (k === 'bond') {
       stats.bond += adjusted;
     } else {

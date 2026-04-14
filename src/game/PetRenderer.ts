@@ -38,6 +38,8 @@ export interface PetAnimState {
   customAction: string | null;
   /** customAction 남은 시간(초) */
   customActionTimer: number;
+  /** 아픈 상태 시각 렌더링용 */
+  isSick: boolean;
 }
 
 export function createAnimState(): PetAnimState {
@@ -51,6 +53,7 @@ export function createAnimState(): PetAnimState {
     emotion: 'neutral',
     customAction: null,
     customActionTimer: 0,
+    isSick: false,
   };
 }
 
@@ -108,6 +111,17 @@ export function drawPet(
   ctx.save();
   ctx.translate(cx, cy + anim.bounceY);
   ctx.scale(anim.breathScale, anim.breathScale);
+
+  // Sick blue tint overlay (전체에 파란 틴트)
+  if (anim.isSick) {
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle = '#4488FF';
+    ctx.beginPath();
+    ctx.arc(0, 0, bodyR * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   // Happiness glow
   if (showGlow) {
@@ -386,6 +400,22 @@ function drawHead(
     ctx.fill();
   }
 
+  // Sick visuals: sweat drop + thermometer
+  if (anim.isSick) {
+    // 이마 땀방울
+    ctx.fillStyle = '#87CEEB';
+    const sweatY = headY - headR * 0.6 + Math.sin(anim.time * 4) * 2;
+    ctx.beginPath();
+    ctx.moveTo(headR * 0.35, sweatY);
+    ctx.quadraticCurveTo(headR * 0.35 + 3, sweatY + 6, headR * 0.35, sweatY + 8);
+    ctx.quadraticCurveTo(headR * 0.35 - 3, sweatY + 6, headR * 0.35, sweatY);
+    ctx.fill();
+    // 온도계 이모지
+    ctx.font = `${headR * 0.4}px Apple Color Emoji, Segoe UI Emoji`;
+    ctx.textAlign = 'center';
+    ctx.fillText('🌡️', -headR * 0.7, headY - headR * 0.8);
+  }
+
   // Emotion particles
   if (anim.emotion === 'happy') {
     drawSparkles(ctx, 0, headY - headR, headR, anim.time);
@@ -405,6 +435,24 @@ function drawEye(
   anim: PetAnimState,
   tired = false,
 ): void {
+  // Sick spiral eyes (X_X style)
+  if (anim.isSick) {
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = r * 0.2;
+    ctx.lineCap = 'round';
+    // 소용돌이 눈
+    ctx.beginPath();
+    for (let a = 0; a < Math.PI * 3; a += 0.2) {
+      const sr = (a / (Math.PI * 3)) * r * 0.5;
+      const sx = x + Math.cos(a + anim.time * 2) * sr;
+      const sy = y + Math.sin(a + anim.time * 2) * sr;
+      if (a === 0) ctx.moveTo(sx, sy);
+      else ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+    return;
+  }
+
   if (anim.emotion === 'sleeping') {
     // Closed eyes (line)
     ctx.strokeStyle = color;
