@@ -31,6 +31,7 @@ import { getPersonalitySpeech, getSpeechFromCategory } from '../data/speeches';
 import { rollVisitor, VISITORS, SEASONAL_VISITORS } from '../data/visitors';
 import { rollLuckyDrop } from '../data/lucky-drops';
 import { generateAutoEvents, generateMultiPetEvents } from '../data/auto-events';
+import { getCurrentSeasonEvent } from '../data/events';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
 
@@ -59,30 +60,35 @@ export class HomeScene implements Scene {
   private petCanvas: PetCanvas | null = null;
   /** 펫별 쿨다운: key = "petId:action" */
   private lastActionTime: Record<string, number> = {};
+  /** 쿨다운 UI 업데이트 타이머 */
+  private cooldownTimerId: number | null = null;
 
   constructor(ctx: Ctx) {
     this.ctx = ctx;
   }
 
   mount(root: HTMLElement): void {
-    this.processLoginRewards();
-    this.processWeeklyRewards();
+    /** 접속 시 요약 항목을 모아서 하나의 모달로 표시 */
+    const summaryItems: string[] = [];
+
+    this.processLoginRewards(summaryItems);
+    this.processWeeklyRewards(summaryItems);
 
     // 스탯 감소 + 업적 체크
     this.ctx.state.current = decayAllPets(this.ctx.state.current);
     this.checkAchievements();
 
     // 질병 체크 (접속 시)
-    this.processSicknessCheck();
+    this.processSicknessCheck(summaryItems);
 
     // 탐험 귀환 체크
-    this.processExpeditionReturns();
+    this.processExpeditionReturns(summaryItems);
 
     // 가구 효과 안내 (접속 시 1회)
     if (this.ctx.state.current.ownedFurniture.length > 0) {
       const count = this.ctx.state.current.ownedFurniture.length;
       const pct = count >= 3 ? 30 : count >= 2 ? 20 : 10;
-      setTimeout(() => showToast(`🏠 가구 효과로 스탯 감소가 ${pct}% 줄었어요!`), 1500);
+      summaryItems.push(`🏠 가구 효과로 스탯 감소가 ${pct}% 줄었어요!`);
     }
 
     this.ctx.save.save(this.ctx.state.current);
@@ -108,6 +114,7 @@ export class HomeScene implements Scene {
     root.innerHTML = `
       <div class="scene home-scene" style="background:${getTimeBackground()}">
         <div class="ad-banner-slot" id="ad-banner-top"></div>
+        ${this.renderEventBanner()}
         <div class="home-header">
           <div class="home-gold"><span class="gold-icon">💰</span><span id="gold-amount">${state.gold}</span>G</div>
           <div class="pet-tabs" id="pet-tabs">${this.renderPetTabs(state)}</div>
@@ -133,12 +140,8 @@ export class HomeScene implements Scene {
         <div id="jealousy-alert" class="jealousy-alert" style="display:none"></div>
         <div id="visitor-quest-strip">${this.renderVisitorQuest(state)}</div>
 
-        <div class="quick-actions">
-          <button class="quick-btn" data-action="feed"><span class="quick-btn-icon">🍖</span><span>먹이</span></button>
-          <button class="quick-btn" data-action="play"><span class="quick-btn-icon">🎾</span><span>놀기</span></button>
-          <button class="quick-btn" data-action="walk"><span class="quick-btn-icon">🚶</span><span>산책</span></button>
-          <button class="quick-btn" data-action="clean"><span class="quick-btn-icon">🛁</span><span>씻기</span></button>
-          <button class="quick-btn" data-action="talk"><span class="quick-btn-icon">💬</span><span>대화</span></button>
+        <div class="quick-actions" id="quick-actions">
+          ${this.renderQuickActions()}
         </div>
 
         <div class="more-actions-row" id="more-actions">
@@ -200,10 +203,10 @@ export class HomeScene implements Scene {
     const absentHours = absentMs / (1000 * 60 * 60);
 
     // 방문자 시스템
-    this.processVisitor(absentHours);
+    this.processVisitor(absentHours, summaryItems);
 
     // 자율 행동 로그
-    this.processAutoEvents(activePet, absentHours);
+    this.processAutoEvents(activePet, absentHours, summaryItems);
 
     // 아픈 상태 UI
     this.showSickIndicators(activePet);
@@ -216,6 +219,10 @@ export class HomeScene implements Scene {
     this.bindDailyDelegation(root);
     this.updateJealousyAlert(root);
     this.startAutoSave();
+    this.startCooldownTimer(root);
+
+    // 접속 시 요약 모달 (토스트 대신)
+    setTimeout(() => this.showDailySummary(root, summaryItems), 600);
   }
 
   /** 복귀 인사 시스템: 부재 시간에 따라 다른 반응 */
@@ -249,14 +256,14 @@ export class HomeScene implements Scene {
     }, 500);
   }
 
-  private processLoginRewards(): void {
+  private processLoginRewards(summaryItems: string[]): void {
     const loginResult = processLogin(this.ctx.state.current);
     this.ctx.state.current = loginResult.state;
     if (loginResult.reward > 0) {
-      showToast(`출석 보상: ${loginResult.reward}G (${loginResult.chainDay}일차)`);
+      summaryItems.push(`🎁 출석 보상: ${loginResult.reward}G (${loginResult.chainDay}일차)`);
     }
     if (loginResult.streakMilestone) {
-      showToast(`연속 ${this.ctx.state.current.streak}일 출석! +${loginResult.streakMilestone}G`);
+      summaryItems.push(`🔥 연속 ${this.ctx.state.current.streak}일 출석! +${loginResult.streakMilestone}G`);
     }
   }
 
@@ -289,8 +296,11 @@ export class HomeScene implements Scene {
     ];
     return statDefs.map(s => {
       const pct = Math.round(stats[s.key]);
-      return `<div class="mini-stat" style="--pct:${pct};--stat-color:${s.color}" title="${s.label} ${pct}">
-        <span class="mini-stat-icon">${s.emoji}</span>
+      return `<div class="mini-stat-wrap">
+        <div class="mini-stat" style="--pct:${pct};--stat-color:${s.color}" title="${s.label} ${pct}">
+          <span class="mini-stat-icon">${s.emoji}</span>
+        </div>
+        <span class="mini-stat-val">${pct}</span>
       </div>`;
     }).join('');
   }
@@ -374,15 +384,20 @@ export class HomeScene implements Scene {
   }
 
   private bindActions(root: HTMLElement): void {
-    // Quick action buttons (core 5)
-    root.querySelectorAll('.quick-btn').forEach(btn => {
-      const handler = (): void => {
+    // Quick action buttons -- event delegation (buttons re-render on cooldown timer)
+    const quickContainer = root.querySelector('#quick-actions');
+    if (quickContainer) {
+      const quickHandler = (e: Event): void => {
+        const btn = (e.target as HTMLElement).closest('.quick-btn') as HTMLElement | null;
+        if (!btn || btn.classList.contains('on-cooldown')) return;
+        const action = btn.dataset.action;
+        if (!action) return;
         this.ctx.sound.playClick();
-        this.handleAction((btn as HTMLElement).dataset.action!, root);
+        this.handleAction(action, root);
       };
-      btn.addEventListener('click', handler);
-      this.cleanups.push(() => btn.removeEventListener('click', handler));
-    });
+      quickContainer.addEventListener('click', quickHandler);
+      this.cleanups.push(() => quickContainer.removeEventListener('click', quickHandler));
+    }
 
     // More action chips (allcare, expedition, heal)
     root.querySelectorAll('.more-action-chip').forEach(btn => {
@@ -483,7 +498,13 @@ export class HomeScene implements Scene {
 
     // 시간대 보너스 체크
     const timeBonus = getTimeBonus(action);
-    const timeMult = timeBonus?.multiplier ?? 1.0;
+    let timeMult = timeBonus?.multiplier ?? 1.0;
+
+    // 시즌 이벤트 보너스 (시간 보너스와 별도 적용)
+    const seasonEvent = getCurrentSeasonEvent();
+    const seasonMult = (seasonEvent?.bonusAction === action && seasonEvent.bonusMultiplier)
+      ? seasonEvent.bonusMultiplier : 1.0;
+    timeMult *= seasonMult;
 
     switch (action) {
       case 'feed':
@@ -593,6 +614,14 @@ export class HomeScene implements Scene {
         showToast(timeBonus.label);
         this.petCanvas?.emitParticles('star', 4);
       }, 300);
+    }
+
+    // 시즌 이벤트 보너스 토스트
+    if (seasonMult > 1.0 && seasonEvent) {
+      setTimeout(() => {
+        showToast(`${seasonEvent.emoji} ${seasonEvent.name} 보너스 x${seasonEvent.bonusMultiplier}!`);
+        this.petCanvas?.emitParticles('sparkle', 4);
+      }, 600);
     }
 
     this.checkEvolution(prevBond, root);
@@ -853,14 +882,14 @@ export class HomeScene implements Scene {
   }
 
   /** 질병 체크: 모든 펫에 대해 접속 시 실행 */
-  private processSicknessCheck(): void {
+  private processSicknessCheck(summaryItems: string[]): void {
     const state = this.ctx.state.current;
     const runawayPetNames: string[] = [];
     const pets = state.pets.map(pet => {
       const checked = checkSickness(pet);
       const { pet: warned, warn, ranAway } = checkRunawayWarning(checked);
       if (warn) {
-        showToast(`⚠️ ${warned.name}이(가) 너무 오래 아팠어요! 가출 경고!`);
+        summaryItems.push(`⚠️ ${warned.name}이(가) 너무 오래 아팠어요! 가출 경고!`);
       }
       if (ranAway) {
         runawayPetNames.push(warned.name);
@@ -869,9 +898,8 @@ export class HomeScene implements Scene {
     });
     this.ctx.state.current = { ...state, pets };
 
-    // 가출 알림
     for (const name of runawayPetNames) {
-      showToast(`${name}이(가) 가출했어요! 찾으러 가세요!`);
+      summaryItems.push(`🚨 ${name}이(가) 가출했어요! 찾으러 가세요!`);
     }
   }
 
@@ -1006,7 +1034,7 @@ export class HomeScene implements Scene {
   }
 
   /** 방문자 시스템 처리 */
-  private processVisitor(absentHours: number): void {
+  private processVisitor(absentHours: number, summaryItems?: string[]): void {
     const visitor = rollVisitor(absentHours);
     if (!visitor) return;
 
@@ -1019,11 +1047,16 @@ export class HomeScene implements Scene {
     // Canvas에 방문자 표시
     this.petCanvas?.setVisitor(visitor.emoji);
 
+    const rarityLabel = visitor.rarity === 'legendary' ? '✨전설✨ '
+      : visitor.rarity === 'rare' ? '⭐희귀⭐ '
+      : '';
+    const visitorMsg = `${rarityLabel}${visitor.name}이(가) 놀러왔어요!`;
+    if (summaryItems) {
+      summaryItems.push(visitorMsg);
+    } else {
+      setTimeout(() => showToast(visitorMsg), 1200);
+    }
     setTimeout(() => {
-      const rarityLabel = visitor.rarity === 'legendary' ? '✨전설✨ '
-        : visitor.rarity === 'rare' ? '⭐희귀⭐ '
-        : '';
-      showToast(`${rarityLabel}${visitor.name}이(가) 놀러왔어요!`);
       this.petCanvas?.showSpeech(visitor.message);
     }, 1200);
 
@@ -1039,9 +1072,12 @@ export class HomeScene implements Scene {
           reward: visitor.quest.reward,
         },
       };
-      setTimeout(() => {
-        showToast(`📋 퀘스트: ${visitor.quest!.task} → +${visitor.quest!.reward}G`);
-      }, 3000);
+      const questMsg = `📋 퀘스트: ${visitor.quest!.task} → +${visitor.quest!.reward}G`;
+      if (summaryItems) {
+        summaryItems.push(questMsg);
+      } else {
+        setTimeout(() => showToast(questMsg), 3000);
+      }
     }
 
     // 방문자 클릭 시 선물 수령 (3초 후 자동 수령)
@@ -1139,7 +1175,7 @@ export class HomeScene implements Scene {
   }
 
   /** 자율 행동 로그 (부재 중 펫 행동) */
-  private processAutoEvents(pet: PetData, absentHours: number): void {
+  private processAutoEvents(pet: PetData, absentHours: number, summaryItems?: string[]): void {
     const events = generateAutoEvents(pet.personality, absentHours);
 
     // 멀티펫 상호작용 이벤트
@@ -1169,6 +1205,11 @@ export class HomeScene implements Scene {
       ...state,
       diaryEntries: [...state.diaryEntries, ...newEntries, ...multiEntries].slice(-50),
     };
+
+    // 요약 모달에 자율 행동 추가
+    if (summaryItems && allEvents.length > 0) {
+      summaryItems.push(`🐾 부재 중 자율 행동 ${allEvents.length}건`);
+    }
 
     // 순차 말풍선 표시 (2초 간격)
     allEvents.forEach((event, i) => {
@@ -1313,12 +1354,12 @@ export class HomeScene implements Scene {
 
   // === Weekly Tournament ===
 
-  private processWeeklyRewards(): void {
+  private processWeeklyRewards(summaryItems: string[]): void {
     const result = processWeeklyReset(this.ctx.state.current);
     this.ctx.state.current = result.state;
     if (result.reward > 0) {
       const emoji = getWeeklyTierEmoji(result.prevTier);
-      showToast(`${emoji} 지난주 ${result.prevTier} 티어 보상: +${result.reward}G`);
+      summaryItems.push(`${emoji} 지난주 ${result.prevTier} 티어 보상: +${result.reward}G`);
     }
   }
 
@@ -1348,7 +1389,7 @@ export class HomeScene implements Scene {
     }).join('');
   }
 
-  private processExpeditionReturns(): void {
+  private processExpeditionReturns(summaryItems?: string[]): void {
     const state = this.ctx.state.current;
     const now = Date.now();
     const remaining: typeof state.expeditions = [];
@@ -1399,7 +1440,12 @@ export class HomeScene implements Scene {
         this.ctx.state.current = updated;
 
         const matchBonus = personalityMatch ? ' (성격 보너스!)' : '';
-        showToast(`${expDef.emoji} ${pet.name} 탐험 귀환! ${rewardLabels.join(', ')}${matchBonus}`);
+        const msg = `${expDef.emoji} ${pet.name} 탐험 귀환! ${rewardLabels.join(', ')}${matchBonus}`;
+        if (summaryItems) {
+          summaryItems.push(msg);
+        } else {
+          showToast(msg);
+        }
       } else {
         remaining.push(exp);
       }
@@ -1667,6 +1713,86 @@ export class HomeScene implements Scene {
       this.ctx.save.save(this.ctx.state.current);
     }, 30000);
     this.cleanups.push(() => clearInterval(interval));
+  }
+
+  /** 쿨다운 남은 시간 (ms) */
+  private getCooldownRemaining(action: string): number {
+    const cooldown = COOLDOWNS[action];
+    if (!cooldown) return 0;
+    const petId = this.ctx.state.current.activePetIndex;
+    const key = `${petId}:${action}`;
+    const last = this.lastActionTime[key] ?? 0;
+    return Math.max(0, cooldown - (Date.now() - last));
+  }
+
+  /** 퀵 액션 버튼 HTML (쿨다운 상태 포함) */
+  private renderQuickActions(): string {
+    const actions = [
+      { id: 'feed', icon: '🍖', label: '먹이' },
+      { id: 'play', icon: '🎾', label: '놀기' },
+      { id: 'walk', icon: '🚶', label: '산책' },
+      { id: 'clean', icon: '🛁', label: '씻기' },
+      { id: 'talk', icon: '💬', label: '대화' },
+    ];
+    return actions.map(a => {
+      const remaining = this.getCooldownRemaining(a.id);
+      const isOnCooldown = remaining > 0;
+      const cdClass = isOnCooldown ? ' on-cooldown' : '';
+      const cdTimer = isOnCooldown
+        ? `<span class="cooldown-timer">${Math.ceil(remaining / 1000)}s</span>`
+        : '';
+      return `<button class="quick-btn${cdClass}" data-action="${a.id}">
+        <span class="quick-btn-icon">${a.icon}</span><span>${a.label}</span>${cdTimer}
+      </button>`;
+    }).join('');
+  }
+
+  /** 1초마다 quick-actions 쿨다운 UI 갱신 */
+  private startCooldownTimer(root: HTMLElement): void {
+    this.cooldownTimerId = window.setInterval(() => {
+      const container = root.querySelector('#quick-actions');
+      if (!container) return;
+      container.innerHTML = this.renderQuickActions();
+      // 이벤트 재바인드 (이벤트 위임으로 전환)
+    }, 1000);
+    this.cleanups.push(() => {
+      if (this.cooldownTimerId !== null) {
+        clearInterval(this.cooldownTimerId);
+        this.cooldownTimerId = null;
+      }
+    });
+  }
+
+  /** 시즌 이벤트 배너 렌더 */
+  private renderEventBanner(): string {
+    const event = getCurrentSeasonEvent();
+    if (!event) return '';
+    return `<div class="event-banner">${event.emoji} ${event.name} 진행 중! ${event.description}</div>`;
+  }
+
+  /** 접속 시 '오늘의 소식' 모달 (토스트 통합) */
+  private showDailySummary(root: HTMLElement, summaryItems: string[]): void {
+    if (summaryItems.length === 0) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'summary-overlay';
+    overlay.innerHTML = `
+      <div class="summary-card">
+        <h3>오늘의 소식</h3>
+        <div class="summary-list">
+          ${summaryItems.map(s => `<div class="summary-item">${s}</div>`).join('')}
+        </div>
+        <button class="summary-close-btn" id="btn-summary-close">확인</button>
+      </div>
+    `;
+    root.appendChild(overlay);
+
+    const closeHandler = (): void => {
+      overlay.remove();
+    };
+    overlay.querySelector('#btn-summary-close')?.addEventListener('click', closeHandler);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeHandler();
+    });
   }
 
   unmount(): void {

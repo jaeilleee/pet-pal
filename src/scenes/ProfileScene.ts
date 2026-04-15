@@ -4,11 +4,11 @@
 
 import type { Scene } from './SceneManager';
 import type { AppContext } from '../app/AppContext';
-import type { PetPalState } from '../data/state';
 import type { SceneManager } from './SceneManager';
 import { PETS, getGrowthStage, bondToNextStage, PET_SKILLS, getUnlockedSkills } from '../data/pets';
 import type { PetType } from '../data/pets';
-import { getActivePet, overallMood, moodEmoji, generateDiaryEntry } from '../data/state';
+import { getActivePet, overallMood, moodEmoji, generateDiaryEntry, getActivePetTitle } from '../data/state';
+import type { PetData, PetPalState } from '../data/state';
 import { COLORS } from '../data/design-tokens';
 import { createAnimState } from '../game/PetRenderer';
 import { drawPetSprite } from '../game/PetSprite';
@@ -75,6 +75,7 @@ export class ProfileScene implements Scene {
         <div class="profile-section profile-actions">
           <button class="btn-profile-action" id="btn-letter">💌 편지 쓰기</button>
           <button class="btn-profile-action" id="btn-visitor-book">📖 방문자 도감</button>
+          <button class="btn-pet-card-share" id="btn-share-card">🔗 펫 카드 공유</button>
         </div>
       </div>
     `;
@@ -83,6 +84,7 @@ export class ProfileScene implements Scene {
     this.bindBack(root);
     this.bindLetter(root);
     this.bindVisitorBook(root);
+    this.bindShareCard(root);
   }
 
   private maybeGenerateDiary(state: PetPalState, pet: import('../data/state').PetData): void {
@@ -319,6 +321,155 @@ export class ProfileScene implements Scene {
     };
     btn.addEventListener('click', handler);
     this.cleanups.push(() => btn.removeEventListener('click', handler));
+  }
+
+  /** 펫 카드 공유 */
+  private bindShareCard(root: HTMLElement): void {
+    const btn = root.querySelector('#btn-share-card');
+    if (!btn) return;
+    const handler = (): void => {
+      this.ctx.sound.playClick();
+      this.generateAndSharePetCard();
+    };
+    btn.addEventListener('click', handler);
+    this.cleanups.push(() => btn.removeEventListener('click', handler));
+  }
+
+  /** Canvas로 펫 카드 생성 (300x400) → share or download */
+  private generateAndSharePetCard(): void {
+    const state = this.ctx.state.current;
+    const pet = getActivePet(state);
+    if (!pet) return;
+
+    const petDef = PETS[pet.type];
+    const stage = getGrowthStage(pet.type, pet.stats.bond);
+    const stageInfo = petDef.stages[stage];
+    const title = this.getShareTitle(pet, state);
+    const mood = overallMood(pet.stats);
+
+    const W = 300;
+    const H = 400;
+    const cvs = document.createElement('canvas');
+    cvs.width = W * 2;
+    cvs.height = H * 2;
+    const c = cvs.getContext('2d');
+    if (!c) return;
+    c.scale(2, 2);
+
+    // 배경 그라데이션
+    const grad = c.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#FFF3E0');
+    grad.addColorStop(1, '#E8F4FD');
+    c.fillStyle = grad;
+    c.fillRect(0, 0, W, H);
+
+    // 카드 프레임 (둥근 테두리)
+    c.strokeStyle = 'rgba(224,96,64,0.2)';
+    c.lineWidth = 3;
+    c.beginPath();
+    c.roundRect(8, 8, W - 16, H - 16, 16);
+    c.stroke();
+
+    // 바닥
+    c.fillStyle = '#D7CCC8';
+    c.fillRect(0, H * 0.6, W, H * 0.4);
+
+    // 펫 렌더
+    drawPetSprite(c, pet.type, stage, W / 2, H * 0.38, stageInfo.size * 1.3);
+
+    // 이름
+    c.fillStyle = '#352820';
+    c.font = 'bold 22px Nunito, Pretendard, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(pet.name, W / 2, H * 0.68);
+
+    // 칭호
+    c.fillStyle = '#786860';
+    c.font = '13px Nunito, Pretendard, sans-serif';
+    c.fillText(`${title} ${stageInfo.name}`, W / 2, H * 0.73);
+
+    // 스탯 바
+    const stats = [
+      { label: '🍖', val: pet.stats.hunger, color: '#e06040' },
+      { label: '😊', val: pet.stats.happiness, color: '#f0c840' },
+      { label: '✨', val: pet.stats.cleanliness, color: '#68a8d8' },
+      { label: '⚡', val: pet.stats.energy, color: '#48b870' },
+    ];
+    const barY = H * 0.79;
+    const barW = 180;
+    const barH = 8;
+    const barX = (W - barW) / 2;
+    stats.forEach((s, i) => {
+      const y = barY + i * 18;
+      c.font = '12px sans-serif';
+      c.textAlign = 'left';
+      c.fillStyle = '#352820';
+      c.fillText(s.label, barX - 20, y + barH / 2);
+      // track
+      c.fillStyle = 'rgba(0,0,0,0.08)';
+      c.beginPath();
+      c.roundRect(barX, y, barW, barH, 4);
+      c.fill();
+      // fill
+      c.fillStyle = s.color;
+      c.beginPath();
+      c.roundRect(barX, y, barW * (s.val / 100), barH, 4);
+      c.fill();
+    });
+
+    // 기분 + 유대감
+    c.fillStyle = '#786860';
+    c.font = '11px Nunito, Pretendard, sans-serif';
+    c.textAlign = 'center';
+    c.fillText(`${moodEmoji(pet.stats)} 기분 ${mood}점  |  유대감 ${pet.stats.bond}`, W / 2, H * 0.96);
+
+    // 워터마크
+    c.fillStyle = 'rgba(0,0,0,0.15)';
+    c.font = '9px sans-serif';
+    c.fillText('PetPal', W / 2, H - 8);
+
+    const dataUrl = cvs.toDataURL('image/png');
+    this.sharePetCard(dataUrl);
+  }
+
+  private getShareTitle(pet: PetData, state: PetPalState): string {
+    try {
+      return getActivePetTitle(pet, state);
+    } catch {
+      return '';
+    }
+  }
+
+  private sharePetCard(dataUrl: string): void {
+    if (navigator.share && navigator.canShare) {
+      fetch(dataUrl)
+        .then(res => res.blob())
+        .then(blob => {
+          const file = new File([blob], 'petpal-card.png', { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            navigator.share({ title: 'PetPal 펫 카드', text: '내 펫을 소개합니다!', files: [file] })
+              .catch((err: unknown) => {
+                if (err instanceof Error && err.name !== 'AbortError') {
+                  this.downloadPetCard(dataUrl);
+                }
+              });
+          } else {
+            this.downloadPetCard(dataUrl);
+          }
+        })
+        .catch(() => this.downloadPetCard(dataUrl));
+    } else {
+      this.downloadPetCard(dataUrl);
+    }
+  }
+
+  private downloadPetCard(dataUrl: string): void {
+    const link = document.createElement('a');
+    link.download = `petpal-card-${Date.now()}.png`;
+    link.href = dataUrl;
+    link.click();
+    showToast('📸 펫 카드가 저장되었어요!');
   }
 
   private bindBack(root: HTMLElement): void {

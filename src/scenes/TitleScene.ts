@@ -36,7 +36,7 @@ export class TitleScene implements Scene {
         <div class="title-bg">
           <div class="title-content">
             <div class="title-logo">
-              <div id="title-pet-canvas" style="height:280px;margin-bottom:8px;"></div>
+              <div id="title-pet-canvas" style="height:300px;margin-bottom:8px;"></div>
               <h1 class="title-text">PetPal</h1>
               <p class="title-sub">나만의 반려동물 키우기</p>
             </div>
@@ -107,8 +107,8 @@ export class TitleScene implements Scene {
     const container = root.querySelector('#title-pet-canvas') as HTMLElement;
     if (!container) return;
 
-    const W = Math.min(container.clientWidth || 350, 390);
-    const H = 280;
+    const W = Math.min(container.clientWidth || 380, 400);
+    const H = 300;
 
     const canvas = document.createElement('canvas');
     canvas.width = W * 2;
@@ -127,15 +127,15 @@ export class TitleScene implements Scene {
     const pets: TitlePet[] = [
       {
         type: 'cat', stage: 'baby', anim: createAnimState(),
-        x: W * 0.18, y: H * 0.58, size: 65,
+        x: W * 0.18, y: H * 0.55, size: 80,
       },
       {
         type: 'dog', stage: 'child', anim: createAnimState(),
-        x: W * 0.5, y: H * 0.48, size: 110,
+        x: W * 0.5, y: H * 0.45, size: 130,
       },
       {
         type: 'bird', stage: 'baby', anim: createAnimState(),
-        x: W * 0.82, y: H * 0.58, size: 60,
+        x: W * 0.82, y: H * 0.55, size: 75,
       },
     ];
 
