@@ -488,79 +488,138 @@ export class PetCanvas {
     if (!pet.stats) return;
     pet.idleEmotionTimer -= dt;
     if (pet.idleEmotionTimer > 0) return;
-    pet.idleEmotionTimer = 8 + Math.random() * 12;
+    // 3~6초마다 뭔가 한다 — 살아있는 느낌
+    pet.idleEmotionTimer = 2.5 + Math.random() * 4;
 
-    if (pet.anim.emotion !== 'neutral') return;
+    // 이미 행동 중이면 스킵
+    if (pet.anim.emotion !== 'neutral' && pet.anim.emotion !== 'sleeping') return;
+    if (pet.anim.customAction) return;
 
     const s = pet.stats;
+    // 스탯 기반 반응 (우선)
     if (s.hunger < 25) {
       this.showPetSpeech(pet, getPersonalitySpeech(pet.personality, s));
       this.setPetEmotion(pet, 'eating');
-    } else if (s.happiness < 25) {
-      this.showPetSpeech(pet, getSpeechFromCategory(pet.personality, 'bored'));
-    } else if (s.cleanliness < 25) {
-      this.showPetSpeech(pet, getPersonalitySpeech(pet.personality, s));
-    } else if (s.energy < 20) {
-      this.showPetSpeech(pet, getSpeechFromCategory(pet.personality, 'tired'));
+      return;
+    }
+    if (s.energy < 20) {
+      // 졸림 → 엎드려 자기
+      pet.anim.customAction = 'sleeping';
+      pet.anim.customActionTimer = 4 + Math.random() * 3;
       this.setPetEmotion(pet, 'sleeping');
-    } else if (s.happiness > 80 && Math.random() < 0.5) {
-      this.showPetSpeech(pet, getSpeechFromCategory(pet.personality, 'happy'));
-      this.setPetEmotion(pet, 'happy');
-      // 펫 타입별 고유 행동
+      return;
+    }
+
+    // 자율 행동 (항상 뭔가 함)
+    const roll = Math.random();
+    if (roll < 0.25) {
+      // 25%: 이동
+      this.startRandomWalk(pet);
+    } else if (roll < 0.50) {
+      // 25%: 펫 타입별 고유 행동
       this.triggerPetTypeBehavior(pet);
-    } else if (Math.random() < 0.3) {
-      // 펫 타입별 idle 행동 (중립 상태에서도 가끔)
-      if (Math.random() < 0.4) {
-        this.triggerPetTypeBehavior(pet);
-      } else {
-        this.startRandomWalk(pet);
+    } else if (roll < 0.65) {
+      // 15%: 주변 둘러보기 (좌우 반전)
+      pet.facingLeft = !pet.facingLeft;
+    } else if (roll < 0.78) {
+      // 13%: 말풍선 (행복/심심에 따라)
+      if (s.happiness > 70) {
+        this.showPetSpeech(pet, getSpeechFromCategory(pet.personality, 'happy'));
+        this.setPetEmotion(pet, 'happy');
+      } else if (s.happiness < 40) {
+        this.showPetSpeech(pet, getSpeechFromCategory(pet.personality, 'bored'));
       }
+    } else if (roll < 0.88) {
+      // 10%: 하품/기지개
+      pet.anim.customAction = pet.type === 'cat' ? 'stretch' : 'yawning';
+      pet.anim.customActionTimer = 2;
+    } else {
+      // 12%: 가만히 앉아있기 (잠깐 쉬기)
+      pet.anim.customAction = 'resting';
+      pet.anim.customActionTimer = 3 + Math.random() * 2;
     }
   }
 
-  /** 펫 타입별 고유 idle 행동 트리거 */
+  /** 펫 타입별 고유 idle 행동 트리거 — 항상 뭔가 한다 */
   private triggerPetTypeBehavior(pet: CanvasPet): void {
+    const r = Math.random();
     switch (pet.type) {
       case 'dog':
-        if (pet.stats && pet.stats.happiness > 70) {
-          // 꼬리 흔들기 진폭 2배는 renderSinglePet에서 처리
-          if (Math.random() < 0.3) {
-            // 가끔 점프
-            pet.anim.customAction = 'jumping';
-            pet.anim.customActionTimer = 1.5;
-          }
+        if (r < 0.3) {
+          pet.anim.customAction = 'jumping';
+          pet.anim.customActionTimer = 1.5;
+          this.particles.emit(pet.x, pet.y + 10, 'sparkle', 2);
+        } else if (r < 0.5) {
+          // 꼬리 쫓기 (빙글빙글)
+          pet.anim.customAction = 'spinning';
+          pet.anim.customActionTimer = 2;
+        } else if (r < 0.7) {
+          // 엎드려서 꼬리 흔들기
+          pet.anim.customAction = 'resting';
+          pet.anim.customActionTimer = 3;
+        } else {
+          this.startRandomWalk(pet);
         }
         break;
       case 'cat':
-        if (Math.random() < 0.3) {
-          // 그루밍 모션
+        if (r < 0.25) {
           pet.anim.customAction = 'grooming';
           pet.anim.customActionTimer = 3;
-        } else if (Math.random() < 0.3) {
-          // 기지개
+        } else if (r < 0.45) {
           pet.anim.customAction = 'stretch';
           pet.anim.customActionTimer = 2;
+        } else if (r < 0.65) {
+          // 가만히 앉아서 주변 관찰
+          pet.facingLeft = !pet.facingLeft;
+          pet.anim.customAction = 'resting';
+          pet.anim.customActionTimer = 4;
+        } else {
+          this.startRandomWalk(pet);
         }
         break;
       case 'bird':
-        // 날개짓 빈도는 happiness에 비례 (drawFeatures에서 wingFlap 사용)
-        // 여기서는 추가 파티클로 표현
-        if (pet.stats && pet.stats.happiness > 60) {
-          this.particles.emit(pet.x, pet.y - 10, 'sparkle', 2);
+        if (r < 0.3) {
+          this.particles.emit(pet.x, pet.y - 10, 'sparkle', 3);
+          pet.anim.customAction = 'jumping'; // 작은 점프 = 날갯짓
+          pet.anim.customActionTimer = 1;
+        } else if (r < 0.5) {
+          // 노래하기 (음표 파티클)
+          this.particles.emit(pet.x + 15, pet.y - 20, 'note', 2);
+          this.showPetSpeech(pet, '🎵');
+        } else if (r < 0.7) {
+          pet.anim.customAction = 'resting'; // 앉아서 깃털 다듬기
+          pet.anim.customActionTimer = 3;
+        } else {
+          this.startRandomWalk(pet);
         }
         break;
       case 'pig':
-        if (pet.stats && pet.stats.hunger < 50) {
-          // 코로 바닥 킁킁
+        if (r < 0.3) {
           pet.anim.customAction = 'sniffing';
           pet.anim.customActionTimer = 2.5;
+        } else if (r < 0.5) {
+          // 뒹굴기
+          pet.anim.customAction = 'spinning';
+          pet.anim.customActionTimer = 2;
+        } else if (r < 0.7) {
+          pet.anim.customAction = 'resting'; // 엎드려 쉬기
+          pet.anim.customActionTimer = 4;
+        } else {
+          this.startRandomWalk(pet);
         }
         break;
       case 'reptile':
-        // 일광욕 자세: 가만히 + 가끔 혀 날름
-        if (Math.random() < 0.4) {
+        if (r < 0.3) {
           pet.anim.customAction = 'tongue';
           pet.anim.customActionTimer = 2;
+        } else if (r < 0.5) {
+          // 일광욕
+          pet.anim.customAction = 'resting';
+          pet.anim.customActionTimer = 5;
+        } else if (r < 0.7) {
+          pet.facingLeft = !pet.facingLeft; // 느릿하게 고개 돌리기
+        } else {
+          this.startRandomWalk(pet);
         }
         break;
     }
