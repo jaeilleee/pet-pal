@@ -51,3 +51,41 @@ export function generateAutoEvents(personality: Personality, absentHours: number
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
 }
+
+// === Multi-Pet Interaction Events ===
+
+const MULTI_PET_EVENTS: string[] = [
+  '{pet1}이(가) {pet2}에게 간식을 나눠줬어요 🍪',
+  '{pet1}이(가) {pet2}를 깨워서 같이 놀았어요',
+  '{pet1}이(가) {pet2}의 자리를 빼앗았어요 😤',
+  '{pet1}이(가) {pet2}에게 코를 비볐어요 💕',
+  '{pet1}이(가) {pet2}를 따라다녔어요',
+  '{pet1}이(가) {pet2}에게 장난을 쳤어요 🤣',
+  '{pet1}이(가) {pet2}와 나란히 잤어요 😴',
+  '{pet1}이(가) {pet2}의 먹이를 훔쳐먹었어요',
+];
+
+/** 멀티펫 상호작용 이벤트 생성 (펫 2마리 이상 + 부재 2시간 이상) */
+export function generateMultiPetEvents(
+  pets: Array<{ name: string }>,
+  absentHours: number,
+): string[] {
+  if (pets.length < 2 || absentHours < 2) return [];
+  const count = Math.min(2, Math.floor(absentHours / 4));
+  if (count === 0) return [];
+
+  const results: string[] = [];
+  const shuffled = [...MULTI_PET_EVENTS].sort(() => Math.random() - 0.5);
+
+  for (let i = 0; i < count; i++) {
+    // 랜덤 2마리 선택
+    const indices = [...Array(pets.length).keys()].sort(() => Math.random() - 0.5);
+    const pet1 = pets[indices[0]];
+    const pet2 = pets[indices[1]];
+    const template = shuffled[i % shuffled.length];
+    results.push(
+      template.replace('{pet1}', pet1.name).replace('{pet2}', pet2.name),
+    );
+  }
+  return results;
+}

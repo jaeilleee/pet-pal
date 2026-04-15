@@ -1956,3 +1956,150 @@
   background: linear-gradient(135deg, #FFEBEE, #FFCDD2);
   border-color: rgba(244,67,54,0.2);
 }
+
+/* ===== Skill Tree ===== */
+.skills-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.skill-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+}
+.skill-item.locked {
+  opacity: 0.5;
+}
+.skill-item.unlocked {
+  border-color: rgba(255,214,0,0.3);
+  background: linear-gradient(135deg, #FFFDE7, #FFF9C4);
+}
+.skill-emoji {
+  font-size: 24px;
+  width: 36px;
+  text-align: center;
+}
+.skill-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.skill-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-dark);
+}
+.skill-desc {
+  font-size: 11px;
+  color: var(--text-light);
+}
+.skill-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #FFD600;
+  background: rgba(255,214,0,0.15);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* ===== Gacha ===== */
+.gacha-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 0;
+  gap: 16px;
+}
+.gacha-machine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.gacha-ball {
+  font-size: 64px;
+  animation: gacha-float 2s ease-in-out infinite;
+}
+@keyframes gacha-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.gacha-ball.gacha-spinning {
+  animation: gacha-spin 0.6s ease-out;
+}
+@keyframes gacha-spin {
+  0% { transform: rotate(0) scale(1); }
+  50% { transform: rotate(360deg) scale(1.2); }
+  100% { transform: rotate(720deg) scale(1); }
+}
+.gacha-desc {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+.gacha-rates {
+  font-size: 11px;
+  color: var(--text-light);
+}
+.btn-gacha {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 32px;
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-btn);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.btn-gacha:active:not(.disabled) {
+  transform: scale(0.95);
+}
+.btn-gacha.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.gacha-result {
+  display: flex;
+  justify-content: center;
+}
+.gacha-reward {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 30px;
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  border: 3px solid;
+  box-shadow: var(--shadow-lg);
+  animation: gacha-reveal 0.4s ease-out;
+}
+@keyframes gacha-reveal {
+  0% { opacity: 0; transform: scale(0.5); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.gacha-reward-rarity {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.gacha-reward-emoji {
+  font-size: 48px;
+}
+.gacha-reward-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-dark);
+}

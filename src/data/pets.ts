@@ -150,3 +150,52 @@ export function bondToNextStage(petType: PetType, bond: number): number {
   }
   return 0;
 }
+
+// === Pet Skill Tree (adult 이후 엔드게임) ===
+
+export interface PetSkill {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  bondRequired: number; // adult 진화 후 추가 bond
+  effect: string; // 효과 코드 키
+}
+
+export const PET_SKILLS: Record<PetType, PetSkill[]> = {
+  dog: [
+    { id: 'treasure-nose', name: '보물 코', emoji: '👃', description: '탐험 보상 +30%', bondRequired: 450, effect: 'expedition_bonus_30' },
+    { id: 'loyal-guard', name: '충성 지킴이', emoji: '🛡️', description: '다른 펫 질투 감소 50%', bondRequired: 550, effect: 'jealousy_reduce_50' },
+    { id: 'fetch-master', name: '물어오기 달인', emoji: '🦴', description: '미니게임 점수 +20%', bondRequired: 700, effect: 'minigame_bonus_20' },
+  ],
+  cat: [
+    { id: 'lucky-paw', name: '행운의 발', emoji: '🍀', description: '럭키 드롭 확률 2배', bondRequired: 420, effect: 'lucky_drop_2x' },
+    { id: 'night-vision', name: '야간 시력', emoji: '🌙', description: '밤 시간 bond +50%', bondRequired: 530, effect: 'night_bond_50' },
+    { id: 'cat-charm', name: '고양이 매력', emoji: '✨', description: '방문자 출현 +50%', bondRequired: 680, effect: 'visitor_bonus_50' },
+  ],
+  bird: [
+    { id: 'morning-song', name: '아침 노래', emoji: '🎵', description: '아침 행복 보너스 +10', bondRequired: 380, effect: 'morning_happy_10' },
+    { id: 'sky-scout', name: '하늘 정찰', emoji: '🔭', description: '탐험 시간 -20%', bondRequired: 480, effect: 'expedition_time_reduce' },
+    { id: 'feather-dance', name: '깃털 춤', emoji: '💃', description: '모든 스탯 보너스 +10%', bondRequired: 650, effect: 'all_stats_10' },
+  ],
+  pig: [
+    { id: 'truffle-finder', name: '트러플 탐지', emoji: '🍄', description: '탐험 전리품 확률 2배', bondRequired: 460, effect: 'expedition_item_2x' },
+    { id: 'foodie-boost', name: '미식가', emoji: '🍽️', description: '먹이 효과 +50%', bondRequired: 560, effect: 'feed_bonus_50' },
+    { id: 'piggy-bank', name: '돼지 저금통', emoji: '🐖', description: '모든 골드 획득 +20%', bondRequired: 720, effect: 'gold_bonus_20' },
+  ],
+  reptile: [
+    { id: 'sun-power', name: '태양의 힘', emoji: '☀️', description: '낮 에너지 감소 -50%', bondRequired: 500, effect: 'day_energy_save' },
+    { id: 'dragon-breath', name: '드래곤 브레스', emoji: '🔥', description: '미니게임 라이프 +1', bondRequired: 600, effect: 'minigame_life_1' },
+    { id: 'ancient-wisdom', name: '고대의 지혜', emoji: '📜', description: '모든 bond +20%', bondRequired: 750, effect: 'bond_bonus_20' },
+  ],
+};
+
+/** 해금된 스킬 목록 반환 */
+export function getUnlockedSkills(petType: PetType, bond: number): PetSkill[] {
+  return PET_SKILLS[petType].filter(s => bond >= s.bondRequired);
+}
+
+/** 특정 스킬 효과 보유 여부 */
+export function hasSkill(petType: PetType, bond: number, skillEffect: string): boolean {
+  return PET_SKILLS[petType].some(s => bond >= s.bondRequired && s.effect === skillEffect);
+}

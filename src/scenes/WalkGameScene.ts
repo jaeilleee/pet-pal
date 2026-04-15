@@ -33,6 +33,8 @@ export class WalkGameScene implements Scene {
   private lane = 1; // 0=left, 1=center, 2=right
   private score = 0;
   private distance = 0;
+  private currentStage = 0;
+  private stageFlashTimer = 0;
   private obstacles: WalkObstacle[] = [];
   private frameId = 0;
   private lastTime = 0;
@@ -137,6 +139,8 @@ export class WalkGameScene implements Scene {
     this.lane = 1;
     this.speed = 150;
     this.obstacles = [];
+    this.currentStage = 0;
+    this.stageFlashTimer = 0;
     this.running = true;
     this.lastTime = performance.now();
     this.frameId = requestAnimationFrame(this.loop);
@@ -156,6 +160,8 @@ export class WalkGameScene implements Scene {
       this.spawnObstacle();
       this.spawnTimer = Math.max(0.5, 1.2 - this.distance * 0.005);
     }
+
+    if (this.stageFlashTimer > 0) this.stageFlashTimer -= dt;
 
     this.updateObstacles(dt);
     this.render();
@@ -205,6 +211,15 @@ export class WalkGameScene implements Scene {
             const points = obs.type === 'coin' ? 15 : obs.type === 'butterfly' ? 20 : 10;
             this.score += points;
             this.ctx.sound.playCoin();
+            // 스테이지 체크 (50점마다)
+            const newStage = Math.floor(this.score / 50);
+            if (newStage > this.currentStage) {
+              this.currentStage = newStage;
+              this.stageFlashTimer = 2.0;
+              const isBonusStage = this.currentStage % 5 === 0;
+              showToast(`Stage ${this.currentStage} Clear! ${isBonusStage ? '🌟 보너스 x2!' : '🎉'}`);
+              this.ctx.sound.playLevelUp();
+            }
           }
         }
       }
@@ -259,6 +274,32 @@ export class WalkGameScene implements Scene {
       bounceY: this.petAnim.bounceY,
       scale: this.petAnim.breathScale,
     });
+
+    // 스테이지 표시 (좌상단)
+    if (this.currentStage > 0) {
+      c.font = 'bold 14px Quicksand, sans-serif';
+      c.textAlign = 'left';
+      c.fillStyle = '#FF7043';
+      c.fillText(`Stage ${this.currentStage}`, 10, 30);
+    }
+
+    // 스테이지 클리어 플래시
+    if (this.stageFlashTimer > 0) {
+      const alpha = Math.min(1, this.stageFlashTimer);
+      c.save();
+      c.globalAlpha = alpha;
+      c.font = 'bold 32px Nunito, sans-serif';
+      c.textAlign = 'center';
+      c.fillStyle = '#FFD600';
+      c.strokeStyle = '#E64A19';
+      c.lineWidth = 3;
+      const text = this.currentStage % 5 === 0
+        ? `Stage ${this.currentStage} 🌟 x2!`
+        : `Stage ${this.currentStage} Clear!`;
+      c.strokeText(text, this.W / 2, this.H / 3);
+      c.fillText(text, this.W / 2, this.H / 3);
+      c.restore();
+    }
   }
 
   private updateUI(): void {
@@ -276,12 +317,21 @@ export class WalkGameScene implements Scene {
 
     let state = this.ctx.state.current;
     state.totalMiniGamesPlayed++;
-    const goldReward = Math.floor(this.score / 3) + Math.floor(this.distance / 5);
+
+    // 스테이지 보너스
+    const bonusStages = Math.floor(this.currentStage / 5);
+    let goldReward = Math.floor(this.score / 3) + Math.floor(this.distance / 5);
+    if (bonusStages > 0) goldReward = Math.floor(goldReward * (1 + bonusStages * 0.5));
+
     state.gold += goldReward;
     state.totalGoldEarned += goldReward;
     state = applyEffectsToPet(state, state.activePetIndex, { happiness: 15, bond: 3 });
     // 주간 토너먼트 점수 갱신
     state = updateWeeklyScore(state, this.score);
+    // 최고 스테이지 기록
+    if (this.currentStage > state.walkGameMaxStage) {
+      state.walkGameMaxStage = this.currentStage;
+    }
     this.ctx.state.current = state;
     this.ctx.save.save(state);
 
@@ -291,8 +341,9 @@ export class WalkGameScene implements Scene {
     if (finalDist) finalDist.textContent = Math.floor(this.distance).toString();
     const finalScore = document.querySelector('#walk-final-score');
     if (finalScore) finalScore.textContent = String(this.score);
+    const stageLabel = this.currentStage > 0 ? ` | 스테이지 ${this.currentStage} 달성!` : '';
     const rewardText = document.querySelector('#walk-reward-text');
-    if (rewardText) rewardText.textContent = `보상: +${goldReward}G`;
+    if (rewardText) rewardText.textContent = `보상: +${goldReward}G${stageLabel}`;
 
     this.ctx.sound.playLevelUp();
   }

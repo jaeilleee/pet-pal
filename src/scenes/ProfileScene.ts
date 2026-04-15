@@ -6,7 +6,8 @@ import type { Scene } from './SceneManager';
 import type { AppContext } from '../app/AppContext';
 import type { PetPalState } from '../data/state';
 import type { SceneManager } from './SceneManager';
-import { PETS, getGrowthStage, bondToNextStage } from '../data/pets';
+import { PETS, getGrowthStage, bondToNextStage, PET_SKILLS, getUnlockedSkills } from '../data/pets';
+import type { PetType } from '../data/pets';
 import { getActivePet, overallMood, moodEmoji, generateDiaryEntry } from '../data/state';
 import { COLORS } from '../data/design-tokens';
 import { createAnimState } from '../game/PetRenderer';
@@ -52,6 +53,11 @@ export class ProfileScene implements Scene {
         </div>
 
         <div class="profile-section">
+          <h3>🌟 스킬</h3>
+          ${this.renderSkills(activePet.type, activePet.stats.bond)}
+        </div>
+
+        <div class="profile-section">
           <h3>통계</h3>
           ${this.renderStats(state)}
         </div>
@@ -86,6 +92,28 @@ export class ProfileScene implements Scene {
       if (state.diaryEntries.length > 30) state.diaryEntries.shift();
       this.ctx.save.save(state);
     }
+  }
+
+  private renderSkills(petType: PetType, bond: number): string {
+    const allSkills = PET_SKILLS[petType];
+    const unlocked = getUnlockedSkills(petType, bond);
+    const unlockedIds = new Set(unlocked.map(s => s.id));
+
+    if (allSkills.length === 0) return '<p class="empty-text">스킬이 없어요</p>';
+
+    return `<div class="skills-list">
+      ${allSkills.map(skill => {
+        const isUnlocked = unlockedIds.has(skill.id);
+        return `<div class="skill-item ${isUnlocked ? 'unlocked' : 'locked'}">
+          <span class="skill-emoji">${isUnlocked ? skill.emoji : '🔒'}</span>
+          <div class="skill-info">
+            <span class="skill-name">${isUnlocked ? skill.name : '???'}</span>
+            <span class="skill-desc">${isUnlocked ? skill.description : `유대감 ${skill.bondRequired} 필요 (현재 ${bond})`}</span>
+          </div>
+          ${isUnlocked ? '<span class="skill-badge">활성</span>' : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
   }
 
   private renderStats(state: PetPalState): string {

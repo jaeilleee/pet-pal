@@ -134,6 +134,13 @@ export interface PetPalState {
     progress: number;
     reward: number;
   } | null;
+
+  // === Gacha ===
+  gachaHistory: string[]; // 뽑기 히스토리 (아이템 id)
+
+  // === Mini-game Stage ===
+  miniGameMaxStage: number; // 미니게임 최고 스테이지
+  walkGameMaxStage: number; // 산책 최고 스테이지
 }
 
 export interface DiaryEntry {
@@ -213,6 +220,9 @@ export function createInitialState(): PetPalState {
     weeklyTier: 'none',
     activeRoomTheme: null,
     activeVisitorQuest: null,
+    gachaHistory: [],
+    miniGameMaxStage: 0,
+    walkGameMaxStage: 0,
   };
 }
 
@@ -275,6 +285,11 @@ export function migrateV1toV2(raw: Record<string, unknown>): PetPalState {
     if (base.activeRoomTheme === undefined) base.activeRoomTheme = null;
     // visitor quest 마이그레이션
     if (base.activeVisitorQuest === undefined) base.activeVisitorQuest = null;
+    // gacha 마이그레이션
+    if (!Array.isArray(base.gachaHistory)) base.gachaHistory = [];
+    // mini-game stage 마이그레이션
+    if (typeof base.miniGameMaxStage !== 'number') base.miniGameMaxStage = 0;
+    if (typeof base.walkGameMaxStage !== 'number') base.walkGameMaxStage = 0;
     return base as PetPalState;
   }
 

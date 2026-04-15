@@ -34,6 +34,9 @@ export class MiniGameScene implements Scene {
   private running = false;
   private score = 0;
   private lives = 3;
+  private currentStage = 0;
+  private lastStageScore = 0;
+  private stageFlashTimer = 0;
   private playerX = 0;
   private items: FallingItem[] = [];
   private frameId = 0;
@@ -113,6 +116,9 @@ export class MiniGameScene implements Scene {
   private startGame(): void {
     this.score = 0;
     this.lives = 3;
+    this.currentStage = 0;
+    this.lastStageScore = 0;
+    this.stageFlashTimer = 0;
     this.items = [];
     this.spawnTimer = 0;
     this.elapsed = 0;
@@ -134,6 +140,8 @@ export class MiniGameScene implements Scene {
       this.spawnItem();
       this.spawnTimer = Math.max(0.4, 1.2 - this.elapsed * 0.01);
     }
+
+    if (this.stageFlashTimer > 0) this.stageFlashTimer -= dt;
 
     this.updateItems(dt);
     this.render();
@@ -170,6 +178,15 @@ export class MiniGameScene implements Scene {
           } else {
             this.score += item.points;
             this.ctx.sound.playCoin();
+            // 스테이지 체크 (50점마다)
+            const newStage = Math.floor(this.score / 50);
+            if (newStage > this.currentStage) {
+              this.currentStage = newStage;
+              this.stageFlashTimer = 2.0; // 2초간 표시
+              const isBonusStage = this.currentStage % 5 === 0;
+              showToast(`Stage ${this.currentStage} Clear! ${isBonusStage ? '🌟 보너스 x2!' : '🎉'}`);
+              this.ctx.sound.playLevelUp();
+            }
           }
           this.items.splice(i, 1);
           this.updateUI();
@@ -214,6 +231,32 @@ export class MiniGameScene implements Scene {
     // ground
     c.fillStyle = '#A5D6A7';
     c.fillRect(0, this.H - 20, this.W, 20);
+
+    // 스테이지 표시 (좌상단)
+    if (this.currentStage > 0) {
+      c.font = 'bold 14px Quicksand, sans-serif';
+      c.textAlign = 'left';
+      c.fillStyle = '#FF7043';
+      c.fillText(`Stage ${this.currentStage}`, 10, 30);
+    }
+
+    // 스테이지 클리어 플래시
+    if (this.stageFlashTimer > 0) {
+      const alpha = Math.min(1, this.stageFlashTimer);
+      c.save();
+      c.globalAlpha = alpha;
+      c.font = 'bold 32px Nunito, sans-serif';
+      c.textAlign = 'center';
+      c.fillStyle = '#FFD600';
+      c.strokeStyle = '#E64A19';
+      c.lineWidth = 3;
+      const text = this.currentStage % 5 === 0
+        ? `Stage ${this.currentStage} 🌟 x2!`
+        : `Stage ${this.currentStage} Clear!`;
+      c.strokeText(text, this.W / 2, this.H / 3);
+      c.fillText(text, this.W / 2, this.H / 3);
+      c.restore();
+    }
   }
 
   private updateUI(): void {
@@ -233,12 +276,21 @@ export class MiniGameScene implements Scene {
     const isHighScore = this.score > state.miniGameHighScore;
     if (isHighScore) state.miniGameHighScore = this.score;
 
-    const goldReward = Math.floor(this.score / 3);
+    // 스테이지 보너스: 5스테이지마다 x2
+    const bonusStages = Math.floor(this.currentStage / 5);
+    const stageBonus = bonusStages * 2; // 보너스 배율분 추가
+    let goldReward = Math.floor(this.score / 3);
+    if (bonusStages > 0) goldReward = Math.floor(goldReward * (1 + bonusStages * 0.5));
+
     state.gold += goldReward;
     state.totalGoldEarned += goldReward;
     state = applyEffectsToPet(state, state.activePetIndex, { happiness: 10, bond: 2 });
     // 주간 토너먼트 점수 갱신
     state = updateWeeklyScore(state, this.score);
+    // 최고 스테이지 기록
+    if (this.currentStage > state.miniGameMaxStage) {
+      state.miniGameMaxStage = this.currentStage;
+    }
     this.ctx.state.current = state;
     this.ctx.save.save(state);
 
@@ -249,7 +301,8 @@ export class MiniGameScene implements Scene {
 
     if (overlay) overlay.style.display = 'flex';
     if (finalScore) finalScore.textContent = String(this.score);
-    if (rewardText) rewardText.textContent = `보상: +${goldReward}G ${isHighScore ? '🏆 최고기록!' : ''}`;
+    const stageLabel = this.currentStage > 0 ? ` | 스테이지 ${this.currentStage} 달성!` : '';
+    if (rewardText) rewardText.textContent = `보상: +${goldReward}G${stageLabel} ${isHighScore ? '🏆 최고기록!' : ''}`;
     if (title) title.textContent = isHighScore ? '최고기록!' : '게임 오버';
 
     this.ctx.sound.playLevelUp();

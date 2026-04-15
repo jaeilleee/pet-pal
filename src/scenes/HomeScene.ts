@@ -19,7 +19,7 @@ import {
   processLogin, updateDailyProgress, allDailyTasksDone, getDailyRewardTotal,
   processWeeklyReset, updateWeeklyScore, getWeeklyTierEmoji,
 } from '../data/daily';
-import { getTimeOfDay, getTimeBackground } from '../data/time-guard';
+import { getTimeOfDay, getTimeBackground, getTimeBonus } from '../data/time-guard';
 import { EXPEDITIONS, rollExpeditionRewards } from '../data/expeditions';
 import { COLORS } from '../data/design-tokens';
 import { drawPet, createAnimState } from '../game/PetRenderer';
@@ -30,7 +30,7 @@ import { checkNewAchievements, claimAchievements } from '../data/achievements';
 import { getPersonalitySpeech, getSpeechFromCategory } from '../data/speeches';
 import { rollVisitor, VISITORS, SEASONAL_VISITORS } from '../data/visitors';
 import { rollLuckyDrop } from '../data/lucky-drops';
-import { generateAutoEvents } from '../data/auto-events';
+import { generateAutoEvents, generateMultiPetEvents } from '../data/auto-events';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
 
@@ -461,6 +461,19 @@ export class HomeScene implements Scene {
     });
   }
 
+  /** 효과에 시간 보너스 배율 적용 */
+  private applyTimeBonusToEffects(
+    effects: Partial<Record<keyof import('../data/state').PetStats, number>>,
+    multiplier: number,
+  ): Partial<Record<keyof import('../data/state').PetStats, number>> {
+    const boosted: Partial<Record<keyof import('../data/state').PetStats, number>> = {};
+    for (const [k, v] of Object.entries(effects)) {
+      // 긍정 효과만 배율 적용 (음수는 그대로)
+      boosted[k as keyof import('../data/state').PetStats] = v > 0 ? Math.round(v * multiplier) : v;
+    }
+    return boosted;
+  }
+
   private handleAction(action: string, root: HTMLElement): void {
     if (this.checkCooldown(action)) return;
 
@@ -468,9 +481,13 @@ export class HomeScene implements Scene {
     const idx = state.activePetIndex;
     const prevBond = getActivePet(state)?.stats.bond ?? 0;
 
+    // 시간대 보너스 체크
+    const timeBonus = getTimeBonus(action);
+    const timeMult = timeBonus?.multiplier ?? 1.0;
+
     switch (action) {
       case 'feed':
-        this.ctx.state.current = applyEffectsToPet(state, idx, { hunger: 25, bond: 1 }, 'feed');
+        this.ctx.state.current = applyEffectsToPet(state, idx, this.applyTimeBonusToEffects({ hunger: 25, bond: 1 }, timeMult), 'feed');
         this.ctx.state.current.totalFeeds++;
         this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'feed');
         this.petCanvas?.setEmotion('eating');
@@ -481,7 +498,7 @@ export class HomeScene implements Scene {
         this.ctx.sound.playHarvest();
         break;
       case 'play':
-        this.ctx.state.current = applyEffectsToPet(state, idx, { happiness: 30, energy: -10, bond: 2 }, 'play');
+        this.ctx.state.current = applyEffectsToPet(state, idx, this.applyTimeBonusToEffects({ happiness: 30, energy: -10, bond: 2 }, timeMult), 'play');
         this.ctx.state.current.totalPlays++;
         this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'play');
         this.petCanvas?.setEmotion('happy');
@@ -492,7 +509,7 @@ export class HomeScene implements Scene {
         this.ctx.sound.playLucky();
         break;
       case 'walk':
-        this.ctx.state.current = applyEffectsToPet(state, idx, { happiness: 20, energy: -15, cleanliness: -5, bond: 3 }, 'walk');
+        this.ctx.state.current = applyEffectsToPet(state, idx, this.applyTimeBonusToEffects({ happiness: 20, energy: -15, cleanliness: -5, bond: 3 }, timeMult), 'walk');
         this.ctx.state.current.totalWalks++;
         this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'walk');
         this.petCanvas?.setEmotion('happy');
@@ -503,7 +520,7 @@ export class HomeScene implements Scene {
         this.ctx.sound.playMerge();
         break;
       case 'clean':
-        this.ctx.state.current = applyEffectsToPet(state, idx, { cleanliness: 35, happiness: 5, bond: 1 }, 'clean');
+        this.ctx.state.current = applyEffectsToPet(state, idx, this.applyTimeBonusToEffects({ cleanliness: 35, happiness: 5, bond: 1 }, timeMult), 'clean');
         this.ctx.state.current.totalBaths++;
         this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'clean');
         this.petCanvas?.showSpeech('깨끗해졌다!');
@@ -513,7 +530,7 @@ export class HomeScene implements Scene {
         this.ctx.sound.playWater();
         break;
       case 'talk': {
-        this.ctx.state.current = applyEffectsToPet(state, idx, { happiness: 15, bond: 2 }, 'talk');
+        this.ctx.state.current = applyEffectsToPet(state, idx, this.applyTimeBonusToEffects({ happiness: 15, bond: 2 }, timeMult), 'talk');
         this.ctx.state.current.totalTalks++;
         this.ctx.state.current = updateDailyProgress(this.ctx.state.current, 'talk');
         const currentPet = getActivePet(this.ctx.state.current);
@@ -568,6 +585,14 @@ export class HomeScene implements Scene {
           .then(m => this.ctx.scenes.switchTo(() => new m.ProfileScene(this.ctx)))
           .catch(err => console.error('[HomeScene] load failed', err));
         return;
+    }
+
+    // 시간 보너스 토스트 표시
+    if (timeBonus) {
+      setTimeout(() => {
+        showToast(timeBonus.label);
+        this.petCanvas?.emitParticles('star', 4);
+      }, 300);
     }
 
     this.checkEvolution(prevBond, root);
@@ -1116,23 +1141,37 @@ export class HomeScene implements Scene {
   /** 자율 행동 로그 (부재 중 펫 행동) */
   private processAutoEvents(pet: PetData, absentHours: number): void {
     const events = generateAutoEvents(pet.personality, absentHours);
-    if (events.length === 0) return;
+
+    // 멀티펫 상호작용 이벤트
+    const state = this.ctx.state.current;
+    const multiEvents = generateMultiPetEvents(
+      state.pets.filter(p => !p.isRunaway),
+      absentHours,
+    );
+
+    const allEvents = [...events, ...multiEvents];
+    if (allEvents.length === 0) return;
 
     // 일기에 추가
-    const state = this.ctx.state.current;
+    const today = new Date().toISOString().slice(0, 10);
     const newEntries = events.map(text => ({
-      date: new Date().toISOString().slice(0, 10),
+      date: today,
       emoji: '📝',
       text: `[자율행동] ${text}`,
       petName: pet.name,
     }));
+    const multiEntries = multiEvents.map(text => ({
+      date: today,
+      emoji: '🐾',
+      text: `[상호작용] ${text}`,
+    }));
     this.ctx.state.current = {
       ...state,
-      diaryEntries: [...state.diaryEntries, ...newEntries].slice(-50), // 최근 50개만
+      diaryEntries: [...state.diaryEntries, ...newEntries, ...multiEntries].slice(-50),
     };
 
     // 순차 말풍선 표시 (2초 간격)
-    events.forEach((event, i) => {
+    allEvents.forEach((event, i) => {
       setTimeout(() => {
         if (!this.petCanvas) return;
         this.petCanvas.showSpeech(event);

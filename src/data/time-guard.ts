@@ -50,6 +50,17 @@ export function getTimeOfDay(): TimeOfDay {
   return 'night';
 }
 
+/** 시간대별 보너스 (특정 액션이 특정 시간대에 보너스) */
+export function getTimeBonus(action: string): { multiplier: number; label: string } | null {
+  const time = getTimeOfDay();
+  if (action === 'walk' && time === 'morning') return { multiplier: 1.5, label: '🌅 아침 산책 보너스!' };
+  if (action === 'talk' && time === 'night') return { multiplier: 1.5, label: '🌙 밤 대화 보너스!' };
+  if (action === 'play' && time === 'afternoon') return { multiplier: 1.3, label: '☀️ 오후 놀이 보너스!' };
+  if (action === 'feed' && (time === 'morning' || time === 'evening')) return { multiplier: 1.3, label: '🍽️ 식사 시간 보너스!' };
+  if (action === 'clean' && time === 'evening') return { multiplier: 1.3, label: '🛁 저녁 목욕 보너스!' };
+  return null;
+}
+
 /** 시간대별 배경색 */
 export function getTimeBackground(): string {
   switch (getTimeOfDay()) {

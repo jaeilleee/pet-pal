@@ -8,15 +8,17 @@ import type { PetPalState } from '../data/state';
 import type { SceneManager } from './SceneManager';
 import { ITEMS, type ItemCategory, type ItemDef } from '../data/items';
 import { getActivePet, applyEffectsToPet, PET_SLOT_COSTS, MAX_PETS } from '../data/state';
+import { rollGacha, GACHA_COST, RARITY_COLORS, RARITY_LABELS, type GachaItem } from '../data/gacha';
 import { showToast } from '../ui/Toast';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
 
-type ShopTab = ItemCategory | 'slot';
+type ShopTab = ItemCategory | 'slot' | 'gacha';
 
 const TABS: Array<{ category: ShopTab; label: string; emoji: string }> = [
   { category: 'food', label: '먹이', emoji: '🍖' },
   { category: 'snack', label: '간식', emoji: '🍪' },
+  { category: 'gacha', label: '뽑기', emoji: '🎁' },
   { category: 'accessory', label: '액세서리', emoji: '🎀' },
   { category: 'furniture', label: '가구', emoji: '🏠' },
   { category: 'room-theme', label: '테마', emoji: '🎨' },
@@ -86,6 +88,10 @@ export class ShopScene implements Scene {
       this.renderSlotItems(root);
       return;
     }
+    if (this.activeTab === 'gacha') {
+      this.renderGachaTab(root);
+      return;
+    }
 
     const itemsEl = root.querySelector('#shop-items') as HTMLElement;
     const state = this.ctx.state.current;
@@ -120,6 +126,115 @@ export class ShopScene implements Scene {
     }).join('');
 
     this.bindItemButtons(itemsEl, root);
+  }
+
+  private renderGachaTab(root: HTMLElement): void {
+    const itemsEl = root.querySelector('#shop-items') as HTMLElement;
+    const state = this.ctx.state.current;
+    const canPull = state.gold >= GACHA_COST;
+
+    itemsEl.innerHTML = `
+      <div class="gacha-container">
+        <div class="gacha-machine">
+          <div class="gacha-ball">🎁</div>
+          <p class="gacha-desc">럭키 뽑기! 1회 ${GACHA_COST}G</p>
+          <p class="gacha-rates">일반 60% | 레어 25% | 에픽 12% | 전설 3%</p>
+          <button class="btn-gacha ${canPull ? '' : 'disabled'}" id="btn-gacha" ${canPull ? '' : 'disabled'}>
+            🎰 뽑기! (${GACHA_COST}G)
+          </button>
+        </div>
+        <div id="gacha-result" class="gacha-result" style="display:none"></div>
+      </div>
+    `;
+
+    const gachaBtn = itemsEl.querySelector('#btn-gacha');
+    if (gachaBtn) {
+      const handler = (): void => this.executeGacha(root);
+      gachaBtn.addEventListener('click', handler);
+      this.cleanups.push(() => gachaBtn.removeEventListener('click', handler));
+    }
+  }
+
+  private executeGacha(root: HTMLElement): void {
+    const state = this.ctx.state.current;
+    if (state.gold < GACHA_COST) {
+      showToast('골드가 부족해요!');
+      this.ctx.sound.playError();
+      return;
+    }
+
+    // 비용 차감
+    this.ctx.state.current = { ...state, gold: state.gold - GACHA_COST };
+
+    // 뽑기 실행
+    const item = rollGacha();
+    this.ctx.sound.playClick();
+
+    // 결과 처리
+    this.applyGachaResult(item);
+
+    // 연출
+    const resultEl = root.querySelector('#gacha-result') as HTMLElement;
+    const ballEl = root.querySelector('.gacha-ball') as HTMLElement;
+    if (ballEl) {
+      ballEl.classList.add('gacha-spinning');
+      setTimeout(() => ballEl.classList.remove('gacha-spinning'), 600);
+    }
+
+    setTimeout(() => {
+      if (!resultEl) return;
+      const rarityColor = RARITY_COLORS[item.rarity];
+      const rarityLabel = RARITY_LABELS[item.rarity];
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `
+        <div class="gacha-reward" style="border-color:${rarityColor}">
+          <span class="gacha-reward-rarity" style="color:${rarityColor}">${rarityLabel}</span>
+          <span class="gacha-reward-emoji">${item.emoji}</span>
+          <span class="gacha-reward-name">${item.name}</span>
+        </div>
+      `;
+      if (item.rarity === 'legendary') {
+        showToast('🎉 전설 등급! 대박이에요!');
+      } else if (item.rarity === 'epic') {
+        showToast('✨ 에픽 등급!');
+      }
+      this.ctx.sound.playCoin();
+      this.updateGold(root);
+      // 다시 뽑기 버튼 갱신
+      const gachaBtn = root.querySelector('#btn-gacha') as HTMLButtonElement;
+      if (gachaBtn) {
+        const canPull = this.ctx.state.current.gold >= GACHA_COST;
+        gachaBtn.disabled = !canPull;
+        if (!canPull) gachaBtn.classList.add('disabled');
+      }
+    }, 600);
+  }
+
+  private applyGachaResult(item: GachaItem): void {
+    const state = this.ctx.state.current;
+    if (item.type === 'gold' && item.value) {
+      this.ctx.state.current = {
+        ...state,
+        gold: state.gold + item.value,
+        totalGoldEarned: state.totalGoldEarned + item.value,
+        gachaHistory: [...state.gachaHistory, item.id].slice(-50),
+      };
+    } else if (item.type === 'accessory') {
+      const ownedItems = state.ownedItems.includes(item.id)
+        ? state.ownedItems
+        : [...state.ownedItems, item.id];
+      this.ctx.state.current = {
+        ...state,
+        ownedItems,
+        gachaHistory: [...state.gachaHistory, item.id].slice(-50),
+      };
+    } else {
+      this.ctx.state.current = {
+        ...state,
+        gachaHistory: [...state.gachaHistory, item.id].slice(-50),
+      };
+    }
+    this.ctx.save.save(this.ctx.state.current);
   }
 
   private renderSlotItems(root: HTMLElement): void {
