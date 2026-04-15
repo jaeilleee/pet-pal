@@ -13,6 +13,7 @@ import { showToast } from './ui/Toast';
 import { SceneManager } from './scenes/SceneManager';
 import { TitleScene } from './scenes/TitleScene';
 import { createInitialState, migrateV1toV2, type PetPalState } from './data/state';
+import { preloadAllSprites } from './game/PetSprite';
 import type { AppContext } from './app/AppContext';
 
 async function boot(): Promise<void> {
@@ -38,6 +39,9 @@ async function boot(): Promise<void> {
 
   // 3. CRITICAL: loadAsync BEFORE anything else
   const state = await save.loadAsync();
+
+  // 3.5. Preload pet sprites (non-blocking, fallback exists)
+  await preloadAllSprites().catch(() => undefined);
 
   // 4. Managers
   const ad = createAdManager();

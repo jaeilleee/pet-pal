@@ -9,7 +9,8 @@ import type { SceneManager } from './SceneManager';
 import { PETS, getGrowthStage, bondToNextStage } from '../data/pets';
 import { getActivePet, overallMood, moodEmoji, generateDiaryEntry } from '../data/state';
 import { COLORS } from '../data/design-tokens';
-import { drawPet, createAnimState } from '../game/PetRenderer';
+import { createAnimState } from '../game/PetRenderer';
+import { drawPetSprite } from '../game/PetSprite';
 import { getLetterReply } from '../data/speeches';
 import { showToast } from '../ui/Toast';
 
@@ -143,7 +144,7 @@ export class ProfileScene implements Scene {
       pctx.scale(2, 2);
       const anim = createAnimState();
       anim.emotion = 'happy';
-      drawPet(pctx, petType, stage, anim, cSize / 2, cSize / 2 + 5, size * 0.8);
+      drawPetSprite(pctx, petType, stage, cSize / 2, cSize / 2 + 5, size * 0.8);
     }
   }
 

@@ -6,7 +6,8 @@ import type { Scene } from './SceneManager';
 import type { AppContext } from '../app/AppContext';
 import type { PetPalState } from '../data/state';
 import type { SceneManager } from './SceneManager';
-import { drawPet, createAnimState, updateAnimState, type PetAnimState } from '../game/PetRenderer';
+import { createAnimState, updateAnimState, type PetAnimState } from '../game/PetRenderer';
+import { drawPetSprite } from '../game/PetSprite';
 import type { PetType, GrowthStage } from '../data/pets';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
@@ -139,7 +140,10 @@ export class TitleScene implements Scene {
       c.clearRect(0, 0, W, H);
 
       for (const pet of pets) {
-        drawPet(c, pet.type, pet.stage, pet.anim, pet.x, pet.y, pet.size);
+        drawPetSprite(c, pet.type, pet.stage, pet.x, pet.y, pet.size, {
+          bounceY: pet.anim.bounceY,
+          scale: pet.anim.breathScale,
+        });
       }
 
       frameId = requestAnimationFrame(loop);

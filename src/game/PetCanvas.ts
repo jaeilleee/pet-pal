@@ -7,6 +7,7 @@ import type { PetType, GrowthStage } from '../data/pets';
 import type { PetStats, PetData } from '../data/state';
 import { getGrowthStage, PETS } from '../data/pets';
 import { drawPet, createAnimState, updateAnimState, type PetAnimState } from './PetRenderer';
+import { drawPetSprite, preloadAllSprites } from './PetSprite';
 import { ParticleSystem, type ParticleType } from './Particles';
 import { getTimeOfDay } from '../data/time-guard';
 import { getPersonalitySpeech, getSpeechFromCategory } from '../data/speeches';
@@ -105,6 +106,9 @@ export class PetCanvas {
 
   /** PetData 배열로 Canvas 내부 상태 동기화 */
   setPets(petDataList: PetData[]): void {
+    // 스프라이트 프리로드 (비동기, 실패해도 폴백 있음)
+    preloadAllSprites().catch(() => undefined);
+
     const positions = this.getInitialPositions(petDataList.length);
 
     // 기존 펫 업데이트 또는 새 펫 추가
@@ -678,14 +682,20 @@ export class PetCanvas {
 
     const renderY = pet.y + pet.bounceOffset;
 
-    c.save();
-    if (pet.facingLeft) {
-      c.translate(pet.x, 0);
-      c.scale(-1, 1);
-      c.translate(-pet.x, 0);
+    // 3D 스프라이트 렌더 (PetSprite) — drawPet 프로시저럴 대체
+    drawPetSprite(c, pet.type, pet.stage, pet.x, renderY, pet.size, {
+      flipX: pet.facingLeft,
+      bounceY: pet.anim.bounceY,
+      scale: pet.anim.breathScale,
+      alpha: pet.isSick ? 0.7 : undefined,
+    });
+
+    // sick 상태 온도계 이모지
+    if (pet.isSick) {
+      c.font = '14px Apple Color Emoji, Segoe UI Emoji';
+      c.textAlign = 'center';
+      c.fillText('\uD83C\uDF21\uFE0F', pet.x, renderY - pet.size * 0.5 + Math.sin(pet.anim.time * 2) * 3);
     }
-    drawPet(c, pet.type, pet.stage, pet.anim, pet.x, renderY, pet.size, pet.stats, pet.colorVariant);
-    c.restore();
 
     // 꼬리 각도 복원
     pet.anim.tailAngle = origTailAngle;

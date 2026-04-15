@@ -23,6 +23,7 @@ import { getTimeOfDay, getTimeBackground } from '../data/time-guard';
 import { EXPEDITIONS, rollExpeditionRewards } from '../data/expeditions';
 import { COLORS } from '../data/design-tokens';
 import { drawPet, createAnimState } from '../game/PetRenderer';
+import { drawPetSprite } from '../game/PetSprite';
 import { showToast } from '../ui/Toast';
 import { PetCanvas } from '../game/PetCanvas';
 import { checkNewAchievements, claimAchievements } from '../data/achievements';
@@ -641,7 +642,7 @@ export class HomeScene implements Scene {
         const fadeOut = 1 - progress * 2;
         ctx2d.globalAlpha = fadeOut;
         const shake = Math.sin(progress * 40) * 3;
-        drawPet(ctx2d, petType, prevStage, anim, cx + shake, cy, prevInfo.size * 1.2, undefined);
+        drawPetSprite(ctx2d, petType, prevStage, cx + shake, cy, prevInfo.size * 1.2);
         ctx2d.globalAlpha = 1;
       } else {
         // 새 모습 (fade in + 확대)
@@ -651,7 +652,7 @@ export class HomeScene implements Scene {
         ctx2d.save();
         ctx2d.translate(cx, cy);
         ctx2d.scale(scale, scale);
-        drawPet(ctx2d, petType, newStage, anim, 0, 0, newInfo.size * 1.2, undefined);
+        drawPetSprite(ctx2d, petType, newStage, 0, 0, newInfo.size * 1.2);
         ctx2d.restore();
         ctx2d.globalAlpha = 1;
       }
@@ -1449,7 +1450,7 @@ export class HomeScene implements Scene {
       // 펫 (크게)
       const stage = getGrowthStage(pet.type, pet.stats.bond);
       const stageInfo = PETS[pet.type].stages[stage];
-      drawPet(pctx, pet.type, stage, anim, pSize / 2, pSize / 2 + 20, stageInfo.size * 1.5, pet.stats);
+      drawPetSprite(pctx, pet.type, stage, pSize / 2, pSize / 2 + 20, stageInfo.size * 1.5);
 
       // 이름 태그
       pctx.fillStyle = 'rgba(255,255,255,0.85)';

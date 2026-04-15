@@ -10,7 +10,8 @@ import type { SceneManager } from './SceneManager';
 import { PETS, getGrowthStage } from '../data/pets';
 import { getActivePet, applyEffectsToPet } from '../data/state';
 import { updateWeeklyScore } from '../data/daily';
-import { drawPet, createAnimState, updateAnimState } from '../game/PetRenderer';
+import { createAnimState, updateAnimState } from '../game/PetRenderer';
+import { drawPetSprite } from '../game/PetSprite';
 import { showToast } from '../ui/Toast';
 
 type Ctx = AppContext<PetPalState, SceneManager>;
@@ -254,7 +255,10 @@ export class WalkGameScene implements Scene {
 
     // Player pet (Canvas 렌더)
     updateAnimState(this.petAnim, 0.016);
-    drawPet(c, this.petType, this.petStage, this.petAnim, this.getLaneX(this.lane), this.H - 80, 50);
+    drawPetSprite(c, this.petType, this.petStage, this.getLaneX(this.lane), this.H - 80, 50, {
+      bounceY: this.petAnim.bounceY,
+      scale: this.petAnim.breathScale,
+    });
   }
 
   private updateUI(): void {

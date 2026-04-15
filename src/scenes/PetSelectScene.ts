@@ -100,7 +100,7 @@ export class PetSelectScene implements Scene {
       card.dataset.type = type;
       card.disabled = isOwned;
       card.innerHTML = `
-        <span class="pet-card-emoji">${pet.stages.baby.emoji}</span>
+        <img class="pet-card-emoji" src="/assets/pets/${type}-baby.png" width="80" height="80" style="object-fit:contain" alt="${pet.name}">
         <span class="pet-card-name">${pet.name}</span>
         ${isOwned ? '<span class="pet-card-owned">보유중</span>' : ''}
       `;
@@ -175,7 +175,8 @@ export class PetSelectScene implements Scene {
   private showDetail(detail: HTMLElement, type: PetType): void {
     const pet = PETS[type];
     detail.style.display = 'block';
-    (detail.querySelector('#detail-emoji') as HTMLElement).textContent = pet.stages.baby.emoji;
+    const emojiEl = detail.querySelector('#detail-emoji') as HTMLElement;
+    emojiEl.innerHTML = `<img src="/assets/pets/${type}-baby.png" width="100" height="100" style="object-fit:contain" alt="${pet.name}">`;
     (detail.querySelector('#detail-name') as HTMLElement).textContent = pet.name;
     (detail.querySelector('#detail-desc') as HTMLElement).textContent = pet.description;
     (detail.querySelector('#detail-trait') as HTMLElement).textContent = `${pet.trait}`;
