@@ -32,10 +32,11 @@ export class TitleScene implements Scene {
   mount(root: HTMLElement): void {
     root.innerHTML = `
       <div class="scene title-scene">
+        <div class="title-bokeh" id="title-bokeh"></div>
         <div class="title-bg">
           <div class="title-content">
             <div class="title-logo">
-              <div id="title-pet-canvas" style="height:160px;margin-bottom:12px;"></div>
+              <div id="title-pet-canvas" style="height:280px;margin-bottom:8px;"></div>
               <h1 class="title-text">PetPal</h1>
               <p class="title-sub">나만의 반려동물 키우기</p>
             </div>
@@ -47,6 +48,9 @@ export class TitleScene implements Scene {
         </div>
       </div>
     `;
+
+    // Bokeh circles
+    this.setupBokeh(root);
 
     // Canvas 3마리 펫 렌더
     this.setupTitleCanvas(root);
@@ -78,12 +82,33 @@ export class TitleScene implements Scene {
     this.cleanups.push(() => btn.removeEventListener('click', handler));
   }
 
+  private setupBokeh(root: HTMLElement): void {
+    const container = root.querySelector('#title-bokeh') as HTMLElement;
+    if (!container) return;
+
+    const colors = ['#FFB74D', '#FF8A65', '#FFAB91', '#FFD54F', '#FFE082', '#F48FB1', '#CE93D8'];
+    for (let i = 0; i < 12; i++) {
+      const circle = document.createElement('div');
+      circle.className = 'bokeh-circle';
+      const size = 40 + Math.random() * 80;
+      circle.style.cssText = `
+        width: ${size}px; height: ${size}px;
+        left: ${Math.random() * 100}%;
+        top: ${Math.random() * 100}%;
+        --bokeh-color: ${colors[i % colors.length]};
+        --duration: ${4 + Math.random() * 4}s;
+        --delay: ${Math.random() * -6}s;
+      `;
+      container.appendChild(circle);
+    }
+  }
+
   private setupTitleCanvas(root: HTMLElement): void {
     const container = root.querySelector('#title-pet-canvas') as HTMLElement;
     if (!container) return;
 
     const W = Math.min(container.clientWidth || 350, 390);
-    const H = 160;
+    const H = 280;
 
     const canvas = document.createElement('canvas');
     canvas.width = W * 2;
@@ -98,18 +123,19 @@ export class TitleScene implements Scene {
     if (!c) return;
     c.scale(2, 2);
 
+    // Main dog (large center), cat left smaller, bird right smaller
     const pets: TitlePet[] = [
       {
-        type: 'dog', stage: 'child', anim: createAnimState(),
-        x: W * 0.2, y: H * 0.55, size: 75,
+        type: 'cat', stage: 'baby', anim: createAnimState(),
+        x: W * 0.18, y: H * 0.58, size: 65,
       },
       {
-        type: 'cat', stage: 'baby', anim: createAnimState(),
-        x: W * 0.5, y: H * 0.5, size: 85,
+        type: 'dog', stage: 'child', anim: createAnimState(),
+        x: W * 0.5, y: H * 0.48, size: 110,
       },
       {
         type: 'bird', stage: 'baby', anim: createAnimState(),
-        x: W * 0.8, y: H * 0.55, size: 70,
+        x: W * 0.82, y: H * 0.58, size: 60,
       },
     ];
 

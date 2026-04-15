@@ -86,7 +86,7 @@ export class PetCanvas {
     this.season = this.getCurrentSeason();
 
     this.W = Math.min(container.clientWidth || 350, 390);
-    this.H = Math.min(container.clientHeight || 180, 180);
+    this.H = Math.min(container.clientHeight || 260, 260);
 
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.W * 2;

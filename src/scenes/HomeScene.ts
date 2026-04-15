@@ -102,53 +102,63 @@ export class HomeScene implements Scene {
     const stageInfo = PETS[activePet.type].stages[stage];
     const isSleeping = getTimeOfDay() === 'night' && activePet.stats.energy < 30;
 
+    const stats = activePet.stats;
+    const taskCount = this.getActiveTaskCount(state);
+
     root.innerHTML = `
       <div class="scene home-scene" style="background:${getTimeBackground()}">
         <div class="ad-banner-slot" id="ad-banner-top"></div>
         <div class="home-header">
           <div class="home-gold"><span class="gold-icon">💰</span><span id="gold-amount">${state.gold}</span>G</div>
           <div class="pet-tabs" id="pet-tabs">${this.renderPetTabs(state)}</div>
-          ${this.renderWeeklyBadge(state)}
-          <div id="synergy-badges">${this.renderSynergyBadges(state)}</div>
-          <div class="home-mood" id="mood-display">${moodEmoji(activePet.stats)}</div>
-          <button class="btn-icon" id="btn-achievements">🏆</button>
         </div>
 
         <div class="home-pet-area" id="pet-container"></div>
         <div id="expedition-indicator">${this.renderExpeditionIndicator(state)}</div>
 
-        <div class="pet-name-display">
-          <span class="pet-title-label" id="pet-title-label">${getActivePetTitle(activePet, state)}</span>
+        <div class="pet-info-bar">
           <span class="pet-name-label" id="pet-name-label">${activePet.name}</span>
-          <span class="pet-stage-label" id="pet-stage-label">${stageInfo.name}</span>
+          <span class="pet-title-badge" id="pet-title-label">${getActivePetTitle(activePet, state)} ${stageInfo.name}</span>
+          <div class="mini-stats" id="mini-stats">
+            ${this.renderMiniStats(stats)}
+          </div>
+          <div class="bond-ring-wrap">
+            <div class="bond-ring" style="--bond-pct:${this.getBondPercent(activePet)}">
+              <span class="bond-ring-label">Lv</span>
+            </div>
+            <span class="bond-ring-text" id="bond-text">유대감 ${activePet.stats.bond}</span>
+          </div>
         </div>
 
         <div id="jealousy-alert" class="jealousy-alert" style="display:none"></div>
-
-        <div class="stat-bars" id="stat-bars">${this.renderStatBars(activePet.stats)}</div>
-
-        <div class="bond-bar">
-          <div class="bond-label" id="bond-label">유대감 ${activePet.stats.bond} / ${this.getNextThreshold(activePet)}</div>
-          <div class="bond-track"><div class="bond-fill" id="bond-fill" style="width:${this.getBondPercent(activePet)}%"></div></div>
-        </div>
-
-        <div class="action-grid">
-          <button class="action-btn" data-action="feed"><span>🍖</span>먹이</button>
-          <button class="action-btn" data-action="play"><span>🎾</span>놀기</button>
-          <button class="action-btn" data-action="walk"><span>🚶</span>산책</button>
-          <button class="action-btn" data-action="clean"><span>🛁</span>씻기</button>
-          <button class="action-btn" data-action="talk"><span>💬</span>대화</button>
-          ${activePet.isSick ? '<button class="action-btn action-btn-heal" data-action="heal"><span>💊</span>치료 50G</button>' : ''}
-          <button class="action-btn action-btn-allcare" data-action="allcare"><span>💖</span>올케어</button>
-          <button class="action-btn" data-action="expedition"><span>🗺️</span>탐험</button>
-          <button class="action-btn" data-action="shop"><span>🛍️</span>상점</button>
-          <button class="action-btn" data-action="minigame"><span>🎮</span>게임</button>
-          <button class="action-btn" data-action="photo"><span>📸</span>사진</button>
-          <button class="action-btn" data-action="profile"><span>📋</span>프로필</button>
-        </div>
-
         <div id="visitor-quest-strip">${this.renderVisitorQuest(state)}</div>
-        <div class="daily-strip" id="daily-strip">${this.renderDailyStrip(state)}</div>
+
+        <div class="quick-actions">
+          <button class="quick-btn" data-action="feed"><span class="quick-btn-icon">🍖</span><span>먹이</span></button>
+          <button class="quick-btn" data-action="play"><span class="quick-btn-icon">🎾</span><span>놀기</span></button>
+          <button class="quick-btn" data-action="walk"><span class="quick-btn-icon">🚶</span><span>산책</span></button>
+          <button class="quick-btn" data-action="clean"><span class="quick-btn-icon">🛁</span><span>씻기</span></button>
+          <button class="quick-btn" data-action="talk"><span class="quick-btn-icon">💬</span><span>대화</span></button>
+        </div>
+
+        <div class="more-actions-row" id="more-actions">
+          <button class="more-action-chip" data-action="allcare"><span class="chip-icon">💖</span>올케어</button>
+          <button class="more-action-chip" data-action="expedition"><span class="chip-icon">🗺️</span>탐험</button>
+          ${activePet.isSick ? '<button class="more-action-chip" data-action="heal"><span class="chip-icon">💊</span>치료 50G</button>' : ''}
+        </div>
+
+        ${taskCount > 0 ? `
+        <button class="tasks-badge-btn" id="btn-tasks">
+          📋 할 일 <span class="tasks-badge-count">${taskCount}</span>
+        </button>
+        ` : ''}
+
+        <div class="bottom-tab-bar">
+          <button class="tab-btn" data-action="shop"><span class="tab-btn-icon">🛍️</span><span>상점</span></button>
+          <button class="tab-btn" data-action="minigame"><span class="tab-btn-icon">🎮</span><span>게임</span></button>
+          <button class="tab-btn" data-action="photo"><span class="tab-btn-icon">📸</span><span>사진</span></button>
+          <button class="tab-btn" data-action="profile"><span class="tab-btn-icon">📋</span><span>더보기</span></button>
+        </div>
       </div>
     `;
 
@@ -270,6 +280,22 @@ export class HomeScene implements Scene {
     return tabs + addBtn;
   }
 
+  private renderMiniStats(stats: PetStats): string {
+    const statDefs = [
+      { key: 'hunger' as const, label: '배고픔', emoji: '🍖', color: COLORS.stat.hunger },
+      { key: 'happiness' as const, label: '행복', emoji: '😊', color: COLORS.stat.happiness },
+      { key: 'cleanliness' as const, label: '청결', emoji: '✨', color: COLORS.stat.cleanliness },
+      { key: 'energy' as const, label: '기력', emoji: '⚡', color: COLORS.stat.energy },
+    ];
+    return statDefs.map(s => {
+      const pct = Math.round(stats[s.key]);
+      return `<div class="mini-stat" style="--pct:${pct};--stat-color:${s.color}" title="${s.label} ${pct}">
+        <span class="mini-stat-icon">${s.emoji}</span>
+      </div>`;
+    }).join('');
+  }
+
+  /** Legacy stat bars for profile scene */
   private renderStatBars(stats: PetStats): string {
     const statDefs = [
       { key: 'hunger' as const, label: '배고픔', emoji: '🍖', color: COLORS.stat.hunger },
@@ -284,6 +310,16 @@ export class HomeScene implements Scene {
         <span class="stat-value">${Math.round(stats[s.key])}</span>
       </div>
     `).join('');
+  }
+
+  /** Count active tasks (daily + visitor quest) */
+  private getActiveTaskCount(state: PetPalState): number {
+    let count = 0;
+    if (state.dailyTasks.length > 0 && !state.dailyTasksClaimed) {
+      count += state.dailyTasks.filter(t => t.progress < t.target).length;
+    }
+    if (state.activeVisitorQuest) count++;
+    return count;
   }
 
   private renderVisitorQuest(state: PetPalState): string {
@@ -338,7 +374,8 @@ export class HomeScene implements Scene {
   }
 
   private bindActions(root: HTMLElement): void {
-    root.querySelectorAll('.action-btn').forEach(btn => {
+    // Quick action buttons (core 5)
+    root.querySelectorAll('.quick-btn').forEach(btn => {
       const handler = (): void => {
         this.ctx.sound.playClick();
         this.handleAction((btn as HTMLElement).dataset.action!, root);
@@ -347,17 +384,81 @@ export class HomeScene implements Scene {
       this.cleanups.push(() => btn.removeEventListener('click', handler));
     });
 
-    const achBtn = root.querySelector('#btn-achievements');
-    if (achBtn) {
+    // More action chips (allcare, expedition, heal)
+    root.querySelectorAll('.more-action-chip').forEach(btn => {
       const handler = (): void => {
         this.ctx.sound.playClick();
-        import('./AchievementsScene')
-          .then(m => this.ctx.scenes.switchTo(() => new m.AchievementsScene(this.ctx)))
-          .catch(err => console.error('[HomeScene] load failed', err));
+        this.handleAction((btn as HTMLElement).dataset.action!, root);
       };
-      achBtn.addEventListener('click', handler);
-      this.cleanups.push(() => achBtn.removeEventListener('click', handler));
+      btn.addEventListener('click', handler);
+      this.cleanups.push(() => btn.removeEventListener('click', handler));
+    });
+
+    // Bottom tab bar
+    root.querySelectorAll('.tab-btn').forEach(btn => {
+      const handler = (): void => {
+        this.ctx.sound.playClick();
+        this.handleAction((btn as HTMLElement).dataset.action!, root);
+      };
+      btn.addEventListener('click', handler);
+      this.cleanups.push(() => btn.removeEventListener('click', handler));
+    });
+
+    // Tasks badge -> slide-up sheet
+    const tasksBtn = root.querySelector('#btn-tasks');
+    if (tasksBtn) {
+      const handler = (): void => {
+        this.ctx.sound.playClick();
+        this.showTasksSheet(root);
+      };
+      tasksBtn.addEventListener('click', handler);
+      this.cleanups.push(() => tasksBtn.removeEventListener('click', handler));
     }
+  }
+
+  /** Show tasks slide-up sheet with daily tasks + visitor quest */
+  private showTasksSheet(root: HTMLElement): void {
+    const state = this.ctx.state.current;
+    const done = allDailyTasksDone(state);
+    const overlay = document.createElement('div');
+    overlay.className = 'tasks-sheet-overlay';
+
+    const sheet = document.createElement('div');
+    sheet.className = 'tasks-sheet';
+    sheet.innerHTML = `
+      <div class="tasks-sheet-handle"></div>
+      <h3 class="tasks-sheet-title">📋 할 일</h3>
+      ${this.renderVisitorQuest(state)}
+      ${this.renderDailyStrip(state)}
+    `;
+    root.appendChild(overlay);
+    root.appendChild(sheet);
+
+    // Close on overlay click
+    const closeSheet = (): void => {
+      overlay.remove();
+      sheet.remove();
+    };
+    overlay.addEventListener('click', closeSheet);
+
+    // Daily claim inside sheet
+    sheet.addEventListener('click', (e) => {
+      const claimBtn = (e.target as HTMLElement).closest('#btn-claim-daily');
+      if (!claimBtn) return;
+      const reward = getDailyRewardTotal(this.ctx.state.current);
+      this.ctx.state.current = {
+        ...this.ctx.state.current,
+        gold: this.ctx.state.current.gold + reward,
+        totalGoldEarned: this.ctx.state.current.totalGoldEarned + reward,
+        dailyTasksClaimed: true,
+      };
+      this.ctx.save.save(this.ctx.state.current);
+      this.ctx.sound.playCoin();
+      showToast(`데일리 완료! +${reward}G`);
+      this.petCanvas?.emitParticles('star', 8);
+      closeSheet();
+      this.refreshUI(root);
+    });
   }
 
   private handleAction(action: string, root: HTMLElement): void {
@@ -1131,50 +1232,38 @@ export class HomeScene implements Scene {
     const stage = getGrowthStage(pet.type, pet.stats.bond);
     const stageInfo = PETS[pet.type].stages[stage];
 
-    const statBars = root.querySelector('#stat-bars');
-    if (statBars) statBars.innerHTML = this.renderStatBars(pet.stats);
+    // Mini stats
+    const miniStats = root.querySelector('#mini-stats');
+    if (miniStats) miniStats.innerHTML = this.renderMiniStats(pet.stats);
 
     const goldEl = root.querySelector('#gold-amount');
     if (goldEl) goldEl.textContent = String(state.gold);
 
-    const moodEl = root.querySelector('#mood-display');
-    if (moodEl) moodEl.textContent = moodEmoji(pet.stats);
-
     const titleEl = root.querySelector('#pet-title-label');
-    if (titleEl) titleEl.textContent = getActivePetTitle(pet, state);
+    if (titleEl) titleEl.textContent = `${getActivePetTitle(pet, state)} ${stageInfo.name}`;
 
     const nameEl = root.querySelector('#pet-name-label');
     if (nameEl) nameEl.textContent = pet.name;
 
-    const stageEl = root.querySelector('#pet-stage-label');
-    if (stageEl) stageEl.textContent = stageInfo.name;
-
-    // Visitor quest strip 갱신
+    // Visitor quest strip
     const questStrip = root.querySelector('#visitor-quest-strip');
     if (questStrip) questStrip.innerHTML = this.renderVisitorQuest(state);
 
-    // Daily strip (innerHTML만 교체, 리스너는 위임으로 처리)
-    const dailyStrip = root.querySelector('#daily-strip');
-    if (dailyStrip) dailyStrip.innerHTML = this.renderDailyStrip(state);
+    // Bond ring
+    const bondRing = root.querySelector('.bond-ring') as HTMLElement;
+    if (bondRing) bondRing.style.setProperty('--bond-pct', String(this.getBondPercent(pet)));
+    const bondText = root.querySelector('#bond-text');
+    if (bondText) bondText.textContent = `유대감 ${pet.stats.bond}`;
 
-    const bondFill = root.querySelector('#bond-fill') as HTMLElement;
-    const bondLabel = root.querySelector('#bond-label') as HTMLElement;
-    if (bondFill) bondFill.style.width = `${this.getBondPercent(pet)}%`;
-    if (bondLabel) bondLabel.textContent = `유대감 ${pet.stats.bond} / ${this.getNextThreshold(pet)}`;
-
-    // Pet tabs (innerHTML만 교체, 리스너는 위임으로 처리)
+    // Pet tabs
     const tabsEl = root.querySelector('#pet-tabs');
     if (tabsEl) tabsEl.innerHTML = this.renderPetTabs(state);
 
-    // Expedition indicator 갱신
+    // Expedition indicator
     const expEl = root.querySelector('#expedition-indicator');
     if (expEl) expEl.innerHTML = this.renderExpeditionIndicator(state);
 
-    // Synergy badges 갱신
-    const synergyEl = root.querySelector('#synergy-badges');
-    if (synergyEl) synergyEl.innerHTML = this.renderSynergyBadges(state);
-
-    // Canvas 동기화
+    // Canvas sync
     this.petCanvas?.setPets(state.pets);
     this.petCanvas?.setActivePet(state.activePetIndex);
     this.petCanvas?.setStats(pet.stats);
