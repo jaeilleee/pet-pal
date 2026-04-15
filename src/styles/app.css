@@ -1833,13 +1833,29 @@
   align-items: center;
   padding: 12px;
 }
+.memory-timer-bar-wrap {
+  width: 100%;
+  max-width: 340px;
+  height: 8px;
+  background: #E0E0E0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 4px auto 0;
+}
+.memory-timer-bar {
+  height: 100%;
+  width: 100%;
+  background: #66BB6A;
+  border-radius: 4px;
+  transition: width 0.3s linear, background 0.3s;
+}
 .memory-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   max-width: 340px;
   width: 100%;
-  margin: 16px auto;
+  margin: 12px auto;
 }
 .memory-card {
   aspect-ratio: 1;
@@ -1849,32 +1865,37 @@
   font-size: 28px;
   cursor: pointer;
   position: relative;
-  transition: transform 0.3s, background 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.3s, border-color 0.3s;
+  /* transform is set inline by JS for flip animation */
 }
-.memory-card .card-front {
-  display: none;
-}
+.memory-card .card-front,
 .memory-card .card-back {
-  display: block;
+  pointer-events: none;
 }
 .memory-card.flipped,
 .memory-card.matched {
   background: white;
   border-color: #FFB74D;
-  transform: scale(1.05);
-}
-.memory-card.flipped .card-front,
-.memory-card.matched .card-front {
-  display: block;
-}
-.memory-card.flipped .card-back,
-.memory-card.matched .card-back {
-  display: none;
 }
 .memory-card.matched {
   background: #E8F5E9;
   border-color: #66BB6A;
-  opacity: 0.7;
+}
+.card-sparkle {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 14px;
+  animation: sparkle-pop 0.6s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes sparkle-pop {
+  0% { transform: scale(0); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
 }
 
 /* ===== Visitor Quest Strip ===== */
